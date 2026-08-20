@@ -1,0 +1,19 @@
+import figlet from 'figlet';
+import { CLI_NAME } from '../core/brand.js';
+import { style } from './style.js';
+
+export function renderBanner(): string {
+  const art = figlet.textSync(CLI_NAME, {
+    font: 'Small',
+    horizontalLayout: 'fitted',
+  });
+  return [
+    style.bold(art),
+    style.dim('  配置驱动的 Agent Skill 登记与安装工具'),
+    '',
+    style.dim('  常用命令：'),
+    `    ${style.bold(`${CLI_NAME} install`)}  检查、准备并安装 skill`,
+    `    ${style.bold(`${CLI_NAME} add`)}      将 skill 加入配置表`,
+    '',
+  ].join('\n');
+}
