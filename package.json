@@ -2,6 +2,20 @@
   "name": "skillctl",
   "version": "1.0.0",
   "description": "Configuration-driven Agent Skill catalog installer.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lion1ou/skillctl.git"
+  },
+  "homepage": "https://github.com/lion1ou/skillctl#readme",
+  "bugs": {
+    "url": "https://github.com/lion1ou/skillctl/issues"
+  },
+  "files": [
+    "bin/run.js",
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
   "type": "module",
   "bin": {
     "skillctl": "./bin/run.js"
@@ -42,11 +56,6 @@
       "init": "./dist/hooks/init/welcome"
     }
   },
-  "files": [
-    "bin/run.js",
-    "dist",
-    "README.md"
-  ],
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
