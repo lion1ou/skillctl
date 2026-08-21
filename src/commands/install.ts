@@ -1,20 +1,21 @@
 import { Command, Flags } from '@oclif/core';
 import * as p from '@clack/prompts';
-import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
-import { CLI_NAME, MANIFEST_FILE } from '../core/brand.js';
+import { resolve } from 'node:path';
+import { CLI_NAME } from '../core/brand.js';
 import { loadCliConfig } from '../core/cli-config.js';
-import { readInstallRecord, writeInstallRecord } from '../core/install-record.js';
-import { installItem, type InstallMode } from '../core/installer.js';
 import {
-  externalCacheDir,
+  inspectSkillSources,
+  installCatalogSkills,
+  resolveCatalogSkills,
+  spawnExternalSkillAdd,
+} from '../core/catalog-install.js';
+import { type InstallMode } from '../core/installer.js';
+import {
   findUnregisteredLocalSkills,
   loadSkillCatalog,
   partitionInstallableSkills,
   reconcileSkillCatalog,
-  prepareSkillSources,
   type SkillCatalog,
   type SkillRecord,
 } from '../core/skill-registry.js';
@@ -83,21 +84,30 @@ export default class Install extends Command {
       return;
     }
     const selection: InstallSelection = { ...basic, skills: installable };
-    inspectPreparedState(sourceDir, cacheDir, selection.skills, this.log.bind(this));
-    const prepared = await prepareSkillSources(
-      sourceDir,
-      cacheDir,
-      selection.skills,
-      runExternalPrepare,
-    );
+    const inspection = inspectSkillSources(sourceDir, cacheDir, selection.skills);
+    this.log(`检查完成：来源已准备 ${inspection.readyCount}，待暂存外部 ${inspection.pendingExternal.length}`);
     const scopeRoot = flags['target-root']
       ? resolve(flags['target-root'])
       : selection.scope === 'global' ? homedir() : process.cwd();
-    distributePreparedSkills(scopeRoot, selection, prepared, flags.force, this.log.bind(this));
+    const result = await installCatalogSkills({
+      sourceDir,
+      cacheDir,
+      scopeRoot,
+      targets: selection.targets,
+      selection: {
+        skillIds: selection.skills.map((skill) => skill.id),
+      },
+      mode: selection.mode,
+      force: flags.force,
+      runExternalPrepare,
+    });
+    for (const item of result.items) {
+      this.log(`${item.target}/${item.skill}: ${item.status}`);
+    }
     const skipHint = skippedDisabled.length > 0
       ? `；未启用已跳过：${skippedDisabled.map((skill) => skill.name).join(', ')}`
       : '';
-    p.outro(`已安装 ${prepared.length} 个 skill 到 ${selection.targets.length} 个 target${skipHint}`);
+    p.outro(`已安装 ${result.preparedCount} 个 skill 到 ${selection.targets.length} 个 target${skipHint}`);
   }
 }
 
@@ -159,33 +169,10 @@ function resolveFlagSkills(
   categoryFlags?: string[],
   skillFlags?: string[],
 ): SkillRecord[] {
-  const categoryIds = new Set((categoryFlags ?? []).flatMap((value) => value.split(',')));
-  const skillIds = new Set(skillFlags ?? []);
-  for (const category of catalog.categories) {
-    if (!categoryIds.has(category.id)) continue;
-    for (const skillId of category.skillIds) skillIds.add(skillId);
-  }
-  if (skillIds.size === 0) throw new Error('请通过 -G 或 -s 指定要安装的 skill');
-  const unknown = [...skillIds].filter((id) => !catalog.skills.some((skill) => skill.id === id));
-  if (unknown.length > 0) throw new Error(`未知 skill：${unknown.join(', ')}`);
-  return catalog.skills.filter((skill) => skillIds.has(skill.id));
-}
-
-/** 检查所选本地来源和外部暂存状态，准备前一次性报告。 */
-function inspectPreparedState(
-  sourceDir: string,
-  cacheDir: string,
-  skills: SkillRecord[],
-  log: (message: string) => void,
-): void {
-  const missingLocal = skills.filter((skill) =>
-    skill.type === 'local' && !existsSync(join(sourceDir, skill.source, 'SKILL.md')));
-  if (missingLocal.length > 0) {
-    throw new Error(`本地来源缺失：${missingLocal.map((skill) => skill.name).join(', ')}`);
-  }
-  const pendingExternal = skills.filter((skill) =>
-    skill.type === 'external' && !existsSync(join(externalCacheDir(cacheDir, skill), 'SKILL.md')));
-  log(`检查完成：来源已准备 ${skills.length - pendingExternal.length}，待暂存外部 ${pendingExternal.length}`);
+  return resolveCatalogSkills(catalog, {
+    categoryIds: categoryFlags,
+    skillIds: skillFlags,
+  }, '请通过 -G 或 -s 指定要安装的 skill');
 }
 
 /** 将一个外部包复制到缓存目录，下载期间展示 spinner 进度。 */
@@ -196,83 +183,16 @@ async function runExternalPrepare(input: {
   index: number;
   total: number;
 }): Promise<void> {
-  mkdirSync(input.cachePackageDir, { recursive: true });
   const skillLabel = input.skillNames.join(', ');
   const progress = `${input.index}/${input.total}`;
   const spin = p.spinner();
   spin.start(`正在缓存外部 skill ${progress}：${input.packageId}（${skillLabel}）`);
   try {
-    await spawnSkillsAdd(input.packageId, input.skillNames, input.cachePackageDir);
+    await spawnExternalSkillAdd(input.packageId, input.skillNames, input.cachePackageDir);
     spin.stop(`已缓存 ${progress}：${input.packageId}`);
   } catch (error) {
     spin.stop(`缓存失败 ${progress}：${input.packageId}`);
     throw error;
-  }
-}
-
-/** 异步执行 npx skills add，避免阻塞事件循环导致 spinner 停住。 */
-function spawnSkillsAdd(
-  packageId: string,
-  skillNames: string[],
-  cachePackageDir: string,
-): Promise<void> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(
-      'npx',
-      ['-y', 'skills', 'add', packageId, '--skill', ...skillNames, '--agent', 'universal', '--copy', '-y'],
-      { cwd: cachePackageDir, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (chunk: Buffer | string) => {
-      stdout += String(chunk);
-    });
-    child.stderr?.on('data', (chunk: Buffer | string) => {
-      stderr += String(chunk);
-    });
-    child.on('error', (error) => {
-      reject(new Error(`外部包准备失败 ${packageId}：${error.message}`));
-    });
-    child.on('close', (status) => {
-      if (status === 0) {
-        resolvePromise();
-        return;
-      }
-      const message = `${stderr}\n${stdout}`.trim();
-      reject(new Error(`外部包准备失败 ${packageId}：${message || `exit ${status}`}`));
-    });
-  });
-}
-
-/** 对所有已准备来源执行同一个分发循环并更新安装记录。 */
-function distributePreparedSkills(
-  scopeRoot: string,
-  selection: InstallSelection,
-  prepared: Array<SkillRecord & { sourceDir: string }>,
-  force: boolean,
-  log: (message: string) => void,
-): void {
-  for (const targetId of selection.targets) {
-    const target = getTarget(targetId);
-    const recordFile = join(scopeRoot, target.skillsDir, MANIFEST_FILE);
-    const record = readInstallRecord(recordFile);
-    for (const skill of prepared) {
-      const result = installItem({
-        source: skill.sourceDir,
-        dest: join(scopeRoot, target.skillsDir, skill.name),
-        mode: selection.mode,
-        force,
-      });
-      if (result.status !== 'skipped') {
-        record.skills[skill.name] = {
-          mode: selection.mode,
-          installedAt: new Date().toISOString(),
-          sourceHash: result.sourceHash,
-        };
-      }
-      log(`${targetId}/${skill.name}: ${result.status}`);
-    }
-    writeInstallRecord(recordFile, record);
   }
 }
 

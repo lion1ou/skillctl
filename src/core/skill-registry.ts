@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { CATEGORIES_FILE, SKILLS_FILE } from './brand.js';
+import { normalizeSkillDescription, parseFrontmatter } from './frontmatter.js';
 
 export type SkillType = 'local' | 'external';
 
@@ -136,6 +137,11 @@ export function addSkillsToRegistry(
   for (const skill of accepted) {
     category.skillIds.push(skill.id);
   }
+  saveSkillCatalog(sourceDir, catalog);
+}
+
+/** 校验后同时写入注册表和分类表。 */
+export function saveSkillCatalog(sourceDir: string, catalog: SkillCatalog): void {
   validateCatalog(catalog.skills, catalog.categories);
   writeJson(join(sourceDir, SKILLS_FILE), { version: 1, skills: catalog.skills });
   writeJson(join(sourceDir, CATEGORIES_FILE), {
@@ -227,14 +233,8 @@ function relocateDownloadedSkills(cacheDir: string, packageId: string, skillName
 
 /** 从 SKILL.md frontmatter 读取登记所需的最小元数据。 */
 export function readSkillMetadata(file: string): Record<string, string> {
-  const content = readFileSync(file, 'utf8');
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) return {};
-  const metadata: Record<string, string> = {};
-  for (const line of match[1].split(/\r?\n/)) {
-    const field = line.match(/^([a-zA-Z][\w-]*):\s*(.*)$/);
-    if (field && field[2]) metadata[field[1]] = field[2].trim().replace(/^['"]|['"]$/g, '');
-  }
+  const metadata = parseFrontmatter(readFileSync(file, 'utf8'));
+  if (metadata.description) metadata.description = normalizeSkillDescription(metadata.description);
   return metadata;
 }
 

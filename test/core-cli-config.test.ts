@@ -118,7 +118,7 @@ test('未初始化时给出明确 init 指引', () => {
   try {
     assert.throws(
       () => loadCliConfig({ XDG_CONFIG_HOME: repo.root } as NodeJS.ProcessEnv),
-      /skillctl init --source/,
+      /skill-ctl init --source/,
     );
   } finally {
     repo.cleanup();

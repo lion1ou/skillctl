@@ -1,8 +1,8 @@
-# skillctl
+# skill-ctl
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-配置驱动的 Agent Skill 安装器。`skillctl` 不内置 skill 源，需要先指定源目录，登记 skill，再安装到一个或多个 target。
+配置驱动的 Agent Skill 安装器。`skill-ctl` 不内置 skill 源，需要先指定源目录，登记 skill，再安装到一个或多个 target。
 
 ## 环境
 
@@ -10,6 +10,18 @@
 - 本地开发建议使用 pnpm
 
 ## 安装
+
+```bash
+npm install -g @lion1ou/skill-ctl
+```
+
+全局安装后可直接使用 `skill-ctl`。也可以不安装、临时执行：
+
+```bash
+npx @lion1ou/skill-ctl
+```
+
+本地开发：
 
 ```bash
 git clone https://github.com/lion1ou/skillctl.git
@@ -24,7 +36,7 @@ npm link
 路径必须是绝对路径。交互式 init 先问源目录，再问缓存目录。本机配置已存在时，可选择保留或覆盖。
 
 ```bash
-skillctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
+skill-ctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
 ```
 
 - 非交互环境必须提供 `--source`。
@@ -41,12 +53,13 @@ skillctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
 ## 命令
 
 ```bash
-skillctl init --source /absolute/path/to/catalog
-skillctl add --local
-skillctl add <query|owner/repo>
-skillctl install
-skillctl install -G common -t cursor
-skillctl install -s web-access -t cursor,codex --mode copy
+skill-ctl init --source /absolute/path/to/catalog
+skill-ctl add --local
+skill-ctl add <query|owner/repo>
+skill-ctl install
+skill-ctl install -G common -t cursor
+skill-ctl install -s web-access -t cursor,codex --mode copy
+skill-ctl manage
 ```
 
 ### add
@@ -66,6 +79,21 @@ skillctl install -s web-access -t cursor,codex --mode copy
 3. 注册表里已删除的 skill 会从分类表中移除并提示，不报错。
 4. 缺失的外部 skill 会带进度动画缓存，再软链或复制到各个 target。
 5. 配置表中 `enabled` 为 `false` 的 skill 安装时直接跳过，并在安装结果中列出。缺省视为启用。
+
+### manage
+
+`manage` 在 `127.0.0.1` 启动本机管理页面，包含两个入口：
+
+```bash
+skill-ctl manage
+skill-ctl manage --port 4173 --no-open
+```
+
+- `/` 已安装 Skill：扫描用户根目录，列出已检测到的 Agent、对应文件夹和 skills 目录；选择某个 Agent 后查看其中已落地的 Skill。可按配置表分类安装到当前 Agent；启停通过 `SKILL.md` ↔ `SKILL.md.disable`。
+- `/catalog` 配置表：可视化编辑 `skillctl-skills.json` 与 `skillctl-categories.json`，可改分类、描述、安装启用开关，并把源目录中未登记的本地 skill 同步进配置表。这里的启用只影响 `install`，不会改已安装文件。
+- 已安装页可按名称和启用状态筛选，每 3 秒同步一次文件系统变化。
+- 软链 skill 的文件启停会修改真实来源，并影响其他指向同一来源的链接，页面操作前会明确确认。
+- 服务只监听回环地址，API 使用启动时生成的随机令牌校验请求。
 
 ## 源目录结构
 
@@ -105,6 +133,20 @@ skillctl install -s web-access -t cursor,codex --mode copy
 ## 开发
 
 ```bash
+npm run dev
+# 等价：pnpm run dev
+```
+
+`npm run dev` 会把全局 `skill-ctl` 临时指到本仓库的开发入口：
+
+- 本机还没有 `skill-ctl`：注册到 npm 全局 `bin`。
+- 本机已有 `skill-ctl`：改成软链到开发仓库，并记住原来的指向。
+- 进程结束（包括 Ctrl+C）：原先没有则删除本次注册；原先有则去掉开发软链并恢复原指向。
+
+开发期间可在其他终端直接运行 `skill-ctl manage`。带参数时仍会转给开发态 CLI：
+
+```bash
+npm run dev -- manage --no-open
 pnpm test
 pnpm lint
 ```

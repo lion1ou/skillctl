@@ -1,8 +1,8 @@
-# skillctl
+# skill-ctl
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Configuration-driven installer for Agent Skills. `skillctl` does not ship a catalog. You point it at a source directory, register skills, then install them into one or more agent targets.
+Configuration-driven installer for Agent Skills. `skill-ctl` does not ship a catalog. You point it at a source directory, register skills, then install them into one or more agent targets.
 
 ## Requirements
 
@@ -10,6 +10,18 @@ Configuration-driven installer for Agent Skills. `skillctl` does not ship a cata
 - pnpm (recommended for local development)
 
 ## Install
+
+```bash
+npm install -g @lion1ou/skill-ctl
+```
+
+Global install provides the `skill-ctl` command. You can also run it without installing:
+
+```bash
+npx @lion1ou/skill-ctl
+```
+
+For local development:
 
 ```bash
 git clone https://github.com/lion1ou/skillctl.git
@@ -24,7 +36,7 @@ npm link
 Paths must be absolute. Interactive init asks for the source directory first, then the cache directory. If a local config already exists, you can keep it or overwrite it.
 
 ```bash
-skillctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
+skill-ctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
 ```
 
 - `--source` is required in non-interactive mode.
@@ -41,12 +53,13 @@ The generated files include two example remote skills. Existing files are not ov
 ## Commands
 
 ```bash
-skillctl init --source /absolute/path/to/catalog
-skillctl add --local
-skillctl add <query|owner/repo>
-skillctl install
-skillctl install -G common -t cursor
-skillctl install -s web-access -t cursor,codex --mode copy
+skill-ctl init --source /absolute/path/to/catalog
+skill-ctl add --local
+skill-ctl add <query|owner/repo>
+skill-ctl install
+skill-ctl install -G common -t cursor
+skill-ctl install -s web-access -t cursor,codex --mode copy
+skill-ctl manage
 ```
 
 ### add
@@ -66,6 +79,21 @@ skillctl install -s web-access -t cursor,codex --mode copy
 3. Skills missing from the registry are removed from the category table with a notice, not an error.
 4. Missing external skills are cached with a progress spinner, then copied or symlinked into each target.
 5. Skills with `"enabled": false` in the registry are skipped during install and listed in the result. Missing `enabled` is treated as enabled.
+
+### manage
+
+`manage` starts a local dashboard on `127.0.0.1` with two pages:
+
+```bash
+skill-ctl manage
+skill-ctl manage --port 4173 --no-open
+```
+
+- `/` Installed skills: scan the user home directory for detected Agents, their folders, and skills directories. Select an Agent to inspect installed skills, and install catalog categories into that Agent. Enable/disable renames `SKILL.md` ↔ `SKILL.md.disable`.
+- `/catalog` Catalog: visually edit `skillctl-skills.json` and `skillctl-categories.json`. Change category, description, and install-time `enabled`, and sync unregistered local skills from the source directory. This switch only affects `install`, not files already installed.
+- The installed page filters by name and status, and refreshes filesystem state every three seconds.
+- Toggling a symlinked installed skill modifies its real source and affects other links to that source, so the page asks for confirmation.
+- The service only binds to the loopback address and protects its API with a random per-process token.
 
 ## Catalog layout
 
@@ -100,11 +128,25 @@ External skills are staged under:
 | openclaw | `.openclaw/skills` |
 | hermes | `.hermes/skills` |
 
-Each target skills directory records installs in `.skillctl.json`. `skillctl` does not install rules or MCP configs.
+Each target skills directory records installs in `.skillctl.json`. `skill-ctl` does not install rules or MCP configs.
 
 ## Development
 
 ```bash
+npm run dev
+# equivalent: pnpm run dev
+```
+
+`npm run dev` temporarily points the global `skill-ctl` command at this repo's development entry:
+
+- If `skill-ctl` is missing, it is registered in the npm global `bin`.
+- If `skill-ctl` already exists, it is replaced with a symlink to the development repo and the original target is remembered.
+- When the process exits (including Ctrl+C), a command that did not exist is removed; an existing command is restored to its previous target.
+
+While the session is running, use `skill-ctl manage` from another terminal. Extra arguments are forwarded to the development CLI:
+
+```bash
+npm run dev -- manage --no-open
 pnpm test
 pnpm lint
 ```

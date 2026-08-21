@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CATEGORIES_FILE, SKILLS_FILE } from './brand.js';
+import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from './brand.js';
 import type { CategoryRecord, SkillRecord } from './skill-registry.js';
 
 export interface CliConfig {
@@ -59,7 +59,7 @@ export function peekCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig |
 export function loadCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig {
   const file = resolveCliConfigPath(env);
   if (!existsSync(file)) {
-    throw new Error(`CLI 尚未初始化，请先运行 skillctl init --source <绝对路径>`);
+    throw new Error(`CLI 尚未初始化，请先运行 ${CLI_NAME} init --source <绝对路径>`);
   }
   const config = JSON.parse(readFileSync(file, 'utf8')) as Partial<CliConfig>;
   if (config.version !== 1 || !config.sourceDir) {

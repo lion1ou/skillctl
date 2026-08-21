@@ -8,7 +8,7 @@ import {
   resolveSkillCacheDir,
   type CliConfig,
 } from '../core/cli-config.js';
-import { CATEGORIES_FILE, SKILLS_FILE } from '../core/brand.js';
+import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from '../core/brand.js';
 
 export default class Init extends Command {
   static override description = '初始化 skill 源目录和缓存目录';
@@ -26,7 +26,7 @@ export default class Init extends Command {
   /** 先绑定源目录，再绑定缓存目录；已有配置时询问覆盖或保留。 */
   override async run(): Promise<void> {
     const { flags } = await this.parse(Init);
-    p.intro('skillctl init');
+    p.intro(`${CLI_NAME} init`);
     const existing = peekCliConfig();
     if (existing && process.stdin.isTTY && !flags.force) {
       const kept = await promptKeepOrOverwrite(existing);
@@ -37,7 +37,7 @@ export default class Init extends Command {
       }
     }
     if (!flags.source && !process.stdin.isTTY) {
-      this.error('未配置 skill 源目录，请先运行 skillctl init --source <绝对路径>');
+      this.error(`未配置 skill 源目录，请先运行 ${CLI_NAME} init --source <绝对路径>`);
     }
     const sourceDir = flags.source
       ? resolveRequiredAbsolutePath(flags.source, '源目录')
