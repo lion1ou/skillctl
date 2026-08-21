@@ -17,6 +17,7 @@ function sampleCatalog(): SkillCatalog {
         version: '*',
         source: 'https://github.com/vercel-labs/skills',
         type: 'external',
+        enabled: true,
       },
       {
         id: 'humanizer-zh',
@@ -26,6 +27,7 @@ function sampleCatalog(): SkillCatalog {
         version: '*',
         source: 'https://github.com/op7418/humanizer-zh',
         type: 'external',
+        enabled: true,
       },
       {
         id: 'local-skill',
@@ -35,6 +37,7 @@ function sampleCatalog(): SkillCatalog {
         version: '1.0.0',
         source: 'skills/local-skill',
         type: 'local',
+        enabled: false,
       },
     ],
     categories: [
@@ -79,6 +82,12 @@ test('再次选中分类会取消该分类下全部 skill', () => {
     0,
   );
   assert.deepEqual(selected, []);
+});
+
+test('未启用 skill 的 hint 会标明未启用', () => {
+  const options = buildCatalogOptions(sampleCatalog());
+  const local = options.find((item) => item.value === 'local-skill');
+  assert.equal(local?.hint, '本地能力 · 未启用');
 });
 
 test('单独切换子 skill 不影响同分类其他项', () => {

@@ -131,6 +131,7 @@ function exampleRemoteCatalog(): { skills: SkillRecord[]; categories: CategoryRe
       version: '*',
       source: 'https://github.com/vercel-labs/skills',
       type: 'external',
+      enabled: true,
     },
     {
       id: 'humanizer-zh',
@@ -140,6 +141,7 @@ function exampleRemoteCatalog(): { skills: SkillRecord[]; categories: CategoryRe
       version: '*',
       source: 'https://github.com/op7418/humanizer-zh',
       type: 'external',
+      enabled: true,
     },
   ];
   return {

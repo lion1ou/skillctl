@@ -106,6 +106,7 @@ async function registerExternalSkills(
       version: '*',
       source: `https://github.com/${packageId}`,
       type: 'external',
+      enabled: true,
     });
   }
   addSkillsToRegistry(sourceDir, catalog, categoryId, records);

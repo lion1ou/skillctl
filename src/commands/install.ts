@@ -12,6 +12,7 @@ import {
   externalCacheDir,
   findUnregisteredLocalSkills,
   loadSkillCatalog,
+  partitionInstallableSkills,
   reconcileSkillCatalog,
   prepareSkillSources,
   type SkillCatalog,
@@ -66,10 +67,22 @@ export default class Install extends Command {
       catalog = loadSkillCatalog(sourceDir);
     }
 
-    const skills = interactive
+    const selected = interactive
       ? await promptCatalogSkills(catalog)
       : resolveFlagSkills(catalog, flags.category, flags.skill);
-    const selection: InstallSelection = { ...basic, skills };
+    const { installable, skippedDisabled } = partitionInstallableSkills(selected);
+    if (skippedDisabled.length > 0) {
+      this.log(`未启用，已跳过：${skippedDisabled.map((skill) => skill.name).join(', ')}`);
+    }
+    if (installable.length === 0) {
+      p.outro(
+        skippedDisabled.length > 0
+          ? `未启用，已跳过：${skippedDisabled.map((skill) => skill.name).join(', ')}；没有可安装的已启用 skill`
+          : '没有可安装的已启用 skill',
+      );
+      return;
+    }
+    const selection: InstallSelection = { ...basic, skills: installable };
     inspectPreparedState(sourceDir, cacheDir, selection.skills, this.log.bind(this));
     const prepared = await prepareSkillSources(
       sourceDir,
@@ -81,7 +94,10 @@ export default class Install extends Command {
       ? resolve(flags['target-root'])
       : selection.scope === 'global' ? homedir() : process.cwd();
     distributePreparedSkills(scopeRoot, selection, prepared, flags.force, this.log.bind(this));
-    p.outro(`已安装 ${prepared.length} 个 skill 到 ${selection.targets.length} 个 target`);
+    const skipHint = skippedDisabled.length > 0
+      ? `；未启用已跳过：${skippedDisabled.map((skill) => skill.name).join(', ')}`
+      : '';
+    p.outro(`已安装 ${prepared.length} 个 skill 到 ${selection.targets.length} 个 target${skipHint}`);
   }
 }
 

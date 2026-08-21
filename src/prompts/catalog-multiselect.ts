@@ -34,7 +34,7 @@ export function buildCatalogOptions(catalog: SkillCatalog): CatalogOption[] {
       options.push({
         value: skill.id,
         label: skill.name,
-        hint: skill.description,
+        hint: skill.enabled === false ? `${skill.description} · 未启用` : skill.description,
         depth: 1,
         isGroup: false,
         groupId: category.id,
@@ -54,7 +54,7 @@ export function buildCatalogOptions(catalog: SkillCatalog): CatalogOption[] {
     options.push({
       value: skill.id,
       label: skill.name,
-      hint: skill.description,
+        hint: skill.enabled === false ? `${skill.description} · 未启用` : skill.description,
       depth: 1,
       isGroup: false,
       groupId: '__uncategorized__',

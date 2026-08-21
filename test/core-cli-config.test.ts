@@ -65,6 +65,7 @@ test('源目录缺少配置表时生成带远程示例的 skillctl 前缀文件'
     const catalog = loadSkillCatalog(sourceDir);
     assert.deepEqual(catalog.skills.map((skill) => skill.name), ['find-skills', 'humanizer-zh']);
     assert.equal(catalog.skills.every((skill) => skill.type === 'external'), true);
+    assert.equal(catalog.skills.every((skill) => skill.enabled), true);
     assert.deepEqual(catalog.categories[0]?.skillIds, ['find-skills', 'humanizer-zh']);
     assert.equal(existsSync(join(sourceDir, 'skills')), true);
   } finally {

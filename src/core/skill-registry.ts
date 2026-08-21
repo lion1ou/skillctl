@@ -20,6 +20,7 @@ export interface SkillRecord {
   version: string;
   source: string;
   type: SkillType;
+  enabled: boolean;
 }
 
 export interface CategoryRecord {
@@ -84,9 +85,10 @@ export function reconcileSkillCatalog(sourceDir: string): {
       categories: categoryDocument.categories,
     });
   }
-  validateCatalog(skillDocument.skills, categoryDocument.categories);
+  const skills = skillDocument.skills.map(normalizeSkillRecord);
+  validateCatalog(skills, categoryDocument.categories);
   return {
-    catalog: { skills: skillDocument.skills, categories: categoryDocument.categories },
+    catalog: { skills, categories: categoryDocument.categories },
     removedOrphanIds,
   };
 }
@@ -113,6 +115,7 @@ export function findUnregisteredLocalSkills(
         version: metadata.version || '1.0.0',
         source: `skills/${entry.name}`,
         type: 'local' as const,
+        enabled: true,
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -179,6 +182,25 @@ export async function prepareSkillSources(
     prepared.push({ ...skill, sourceDir: skillSourceDir });
   }
   return prepared;
+}
+
+/** 分出可安装项与未启用项，安装时跳过后者。 */
+export function partitionInstallableSkills(skills: SkillRecord[]): {
+  installable: SkillRecord[];
+  skippedDisabled: SkillRecord[];
+} {
+  const installable: SkillRecord[] = [];
+  const skippedDisabled: SkillRecord[] = [];
+  for (const skill of skills) {
+    if (skill.enabled === false) skippedDisabled.push(skill);
+    else installable.push(skill);
+  }
+  return { installable, skippedDisabled };
+}
+
+/** 缺省视为启用，仅显式 false 为未启用。 */
+function normalizeSkillRecord(skill: SkillRecord): SkillRecord {
+  return { ...skill, enabled: skill.enabled !== false };
 }
 
 /** 返回外部 skill 在缓存根目录中的统一目录：.cache/<repo>/<skillName>。 */

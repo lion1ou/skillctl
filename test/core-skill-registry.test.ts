@@ -6,6 +6,7 @@ import {
   addSkillsToRegistry,
   findUnregisteredLocalSkills,
   loadSkillCatalog,
+  partitionInstallableSkills,
   reconcileSkillCatalog,
   prepareSkillSources,
 } from '../src/core/skill-registry.js';
@@ -34,6 +35,7 @@ test('发现本地目录中未登记的 skill', () => {
     assert.deepEqual(missing.map((skill) => skill.name), ['new-skill']);
     assert.equal(missing[0]?.description, '新增能力');
     assert.equal(missing[0]?.version, '1.2.0');
+    assert.equal(missing[0]?.enabled, true);
   } finally {
     repo.cleanup();
   }
@@ -56,6 +58,7 @@ test('登记 skill 时同步更新注册表和分类表', () => {
 
     const updated = loadSkillCatalog(join(repo.root, 'catalog'));
     assert.equal(updated.skills[0]?.type, 'local');
+    assert.equal(updated.skills[0]?.enabled, true);
     assert.deepEqual(updated.categories[0]?.skillIds, ['new-skill']);
   } finally {
     repo.cleanup();
@@ -75,6 +78,7 @@ test('准备阶段把外部 skill 暂存为统一的本地 sourceDir', async () 
         version: '1.0.0',
         source: 'skills/local-skill',
         type: 'local' as const,
+        enabled: true,
       },
       {
         id: 'remote-skill',
@@ -84,6 +88,7 @@ test('准备阶段把外部 skill 暂存为统一的本地 sourceDir', async () 
         version: '*',
         source: 'https://github.com/owner/repo',
         type: 'external' as const,
+        enabled: true,
       },
     ];
 
@@ -129,6 +134,7 @@ test('注册表已删除的 skill 会从分类中移除且不报错', () => {
         version: '1.0.0',
         source: 'skills/keep-skill',
         type: 'local',
+        enabled: true,
       }],
     }));
     repo.writeFile(`catalog/${CATEGORIES_FILE}`, JSON.stringify({
@@ -147,6 +153,55 @@ test('注册表已删除的 skill 会从分类中移除且不报错', () => {
     assert.deepEqual(result.removedOrphanIds, ['deleted-skill']);
     assert.deepEqual(result.catalog.categories[0]?.skillIds, ['keep-skill']);
     assert.deepEqual(saved.categories[0]?.skillIds, ['keep-skill']);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('配置表缺 enabled 视为启用，false 为未启用并在安装时分出', () => {
+  const repo = createTmpRepo('skillctl-enabled-');
+  try {
+    repo.writeFile(`catalog/${SKILLS_FILE}`, JSON.stringify({
+      version: 1,
+      skills: [
+        {
+          id: 'legacy-skill',
+          package: 'skill-catalog',
+          name: 'legacy-skill',
+          description: '旧项',
+          version: '1.0.0',
+          source: 'skills/legacy-skill',
+          type: 'local',
+        },
+        {
+          id: 'off-skill',
+          package: 'skill-catalog',
+          name: 'off-skill',
+          description: '关闭项',
+          version: '1.0.0',
+          source: 'skills/off-skill',
+          type: 'local',
+          enabled: false,
+        },
+      ],
+    }));
+    repo.writeFile(`catalog/${CATEGORIES_FILE}`, JSON.stringify({
+      version: 1,
+      categories: [{
+        id: 'common',
+        name: '通用',
+        description: '通用能力',
+        skillIds: ['legacy-skill', 'off-skill'],
+      }],
+    }));
+
+    const catalog = loadSkillCatalog(join(repo.root, 'catalog'));
+    assert.equal(catalog.skills[0]?.enabled, true);
+    assert.equal(catalog.skills[1]?.enabled, false);
+
+    const partitioned = partitionInstallableSkills(catalog.skills);
+    assert.deepEqual(partitioned.installable.map((skill) => skill.name), ['legacy-skill']);
+    assert.deepEqual(partitioned.skippedDisabled.map((skill) => skill.name), ['off-skill']);
   } finally {
     repo.cleanup();
   }

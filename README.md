@@ -65,6 +65,7 @@ skillctl install -s web-access -t cursor,codex --mode copy
 2. Interactive skill selection is grouped by category. Child skills are indented. Selecting a category selects every skill in it.
 3. Skills missing from the registry are removed from the category table with a notice, not an error.
 4. Missing external skills are cached with a progress spinner, then copied or symlinked into each target.
+5. Skills with `"enabled": false` in the registry are skipped during install and listed in the result. Missing `enabled` is treated as enabled.
 
 ## Catalog layout
 
@@ -75,7 +76,7 @@ skillctl install -s web-access -t cursor,codex --mode copy
 └── skills/<skill-name>/
 ```
 
-Each registry item has `id`, `package`, `name`, a Chinese `description`, `version`, `source`, and `type` (`local` or `external`). A skill belongs to exactly one category.
+Each registry item has `id`, `package`, `name`, a Chinese `description`, `version`, `source`, `type` (`local` or `external`), and `enabled`. A skill belongs to exactly one category.
 
 ## Cache
 

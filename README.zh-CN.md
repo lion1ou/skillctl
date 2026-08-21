@@ -65,6 +65,7 @@ skillctl install -s web-access -t cursor,codex --mode copy
 2. 交互选择按分类分组，子 skill 缩进展示；选中分类即选中该分类下全部 skill。
 3. 注册表里已删除的 skill 会从分类表中移除并提示，不报错。
 4. 缺失的外部 skill 会带进度动画缓存，再软链或复制到各个 target。
+5. 配置表中 `enabled` 为 `false` 的 skill 安装时直接跳过，并在安装结果中列出。缺省视为启用。
 
 ## 源目录结构
 
@@ -75,7 +76,7 @@ skillctl install -s web-access -t cursor,codex --mode copy
 └── skills/<skill-name>/
 ```
 
-注册表每项包含 `id`、`package`、`name`、中文 `description`、`version`、`source` 和 `type`（`local` 或 `external`）。每个 skill 只属于一个分类。
+注册表每项包含 `id`、`package`、`name`、中文 `description`、`version`、`source`、`type`（`local` 或 `external`）和 `enabled`（启用 / 未启用）。每个 skill 只属于一个分类。
 
 ## 缓存
 
