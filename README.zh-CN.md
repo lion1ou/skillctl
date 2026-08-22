@@ -82,18 +82,32 @@ skill-ctl manage
 
 ### manage
 
-`manage` 在 `127.0.0.1` 启动本机管理页面，包含两个入口：
+`manage` 在 `127.0.0.1` 启动本机管理页面，顶栏可在「安装管理」和「Skill 目录」之间切换。
 
 ```bash
 skill-ctl manage
 skill-ctl manage --port 4173 --no-open
 ```
 
-- `/` 已安装 Skill：默认扫描用户根目录，也可通过系统目录选择器或绝对路径添加项目 Workspace。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。
-- 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent；启停通过 `SKILL.md` ↔ `SKILL.md.disable`。
-- `/catalog` 配置表：可视化编辑 `skillctl-skills.json` 与 `skillctl-categories.json`，可改分类、描述、安装启用开关，并把源目录中未登记的本地 skill 同步进配置表。这里的启用只影响 `install`，不会改已安装文件。
-- 已安装页可按名称和启用状态筛选，每 3 秒同步一次文件系统变化；已启用 Skill 默认排在未启用项之前。
-- Workspace 列表和固定展示的 Agent 保存在 `~/.config/skillctl/config.json`；移除 Workspace 只移除管理记录，不删除项目文件。
+**安装管理 `/`**
+
+- 默认扫描用户根目录，也可通过系统目录选择器或绝对路径添加项目 Workspace。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。批量新增 Agent 只会固定展示，不会预先创建目录。
+- 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent。卡片上的启用/禁用会把 `SKILL.md` 与 `SKILL.md.disable` 互相改名。
+- 点击 Skill 卡片进入详情，读取该 Workspace/Agent 下已落地的 `SKILL.md`（禁用为 `SKILL.md.disable`）。YAML frontmatter 与 Markdown 正文分开展示。点击启用/禁用不会进入详情。
+- 删除 Workspace 只从管理列表移除，不删除项目文件；用户根目录不可删除。
+- 删除某个 Agent 的 Skill 会删除当前 Workspace 中该 Agent 的 skills 目录并取消固定；目录本身为软链时只删除链接。
+- 可按名称和启用状态筛选，每 3 秒同步一次文件系统变化；已启用 Skill 默认排在未启用项之前。
+- Workspace 列表和固定展示的 Agent 保存在 `~/.config/skillctl/config.json`。
+
+**Skill 目录 `/catalog`**
+
+- 可视化编辑 `skillctl-skills.json` 与 `skillctl-categories.json`，可改分类、描述、安装启用开关，并把源目录中未登记的本地 skill 同步进配置表。这里的启用只影响 `install`，不会改已安装文件。
+- 点击卡片进入详情，读取配置表登记 Skill 的源 `SKILL.md`。外部 Skill 尚未缓存时显示「尚未准备」，不会自动下载。
+- 从目录删除只移除配置表登记，不删除源文件。
+
+**共用约定**
+
+- 详情页只展示 `SKILL.md`（或禁用文件），不列出 Skill 目录中的其他源文件。读取路径必须落在已管理 Workspace、本地源目录或外部缓存根内。
 - 软链 skill 的文件启停会修改真实来源，并影响其他指向同一来源的链接，页面操作前会明确确认。
 - 服务只监听回环地址，API 使用启动时生成的随机令牌校验请求。
 
@@ -169,3 +183,10 @@ pnpm lint
 ```
 
 发布到 npm 的包只包含 `bin/` 和编译后的 `dist/`，不会打包 catalog 源文件。
+
+版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后如需自行发布 `@lion1ou/skill-ctl@1.1.0`：
+
+```bash
+pnpm test
+npm publish --access public
+```
