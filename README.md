@@ -89,9 +89,11 @@ skill-ctl manage
 skill-ctl manage --port 4173 --no-open
 ```
 
-- `/` Installed skills: scan the user home directory for detected Agents, their folders, and skills directories. Select an Agent to inspect installed skills, and install catalog categories into that Agent. Enable/disable renames `SKILL.md` ↔ `SKILL.md.disable`.
+- `/` Installed skills: scans the user home directory by default, and can add project Workspaces through the native directory picker or an absolute path. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown.
+- The top-right Install button opens a category dialog and installs into the current Agent under the current Workspace. Enable/disable renames `SKILL.md` ↔ `SKILL.md.disable`.
 - `/catalog` Catalog: visually edit `skillctl-skills.json` and `skillctl-categories.json`. Change category, description, and install-time `enabled`, and sync unregistered local skills from the source directory. This switch only affects `install`, not files already installed.
-- The installed page filters by name and status, and refreshes filesystem state every three seconds.
+- The installed page filters by name and status, places enabled skills before disabled ones, and refreshes filesystem state every three seconds.
+- Workspace paths and pinned Agents are stored in `~/.config/skillctl/config.json`. Removing a Workspace only removes the management entry; it never deletes project files.
 - Toggling a symlinked installed skill modifies its real source and affects other links to that source, so the page asks for confirmation.
 - The service only binds to the loopback address and protects its API with a random per-process token.
 
@@ -127,6 +129,21 @@ External skills are staged under:
 | codex | `.codex/skills` |
 | openclaw | `.openclaw/skills` |
 | hermes | `.hermes/skills` |
+| gemini | `.gemini/skills` |
+| copilot | `.copilot/skills` |
+| windsurf | `.codeium/windsurf/skills` |
+| roo | `.roo/skills` |
+| opencode | `.config/opencode/skills` |
+| openhands | `.openhands/skills` |
+| droid | `.factory/skills` |
+| continue | `.continue/skills` |
+| trae | `.trae/skills` |
+| trae-cn | `.trae-cn/skills` |
+| workbuddy | `.workbuddy/skills` |
+| qoder | `.qoder/skills` |
+| qoder-cn | `.qoder-cn/skills` |
+| codebuddy | `.codebuddy/skills` |
+| qwen | `.qwen/skills` |
 
 Each target skills directory records installs in `.skillctl.json`. `skill-ctl` does not install rules or MCP configs.
 

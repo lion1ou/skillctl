@@ -1,14 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from './brand.js';
 import type { CategoryRecord, SkillRecord } from './skill-registry.js';
+import { getTarget, type TargetId } from './targets.js';
+
+export interface ManagedWorkspaceConfig {
+  path: string;
+  pinnedTargetIds: TargetId[];
+}
 
 export interface CliConfig {
   version: 1;
   sourceDir: string;
   cacheDir: string;
+  workspaces: ManagedWorkspaceConfig[];
 }
 
 /** 解析符合 XDG 规范的 skillctl 配置文件路径。 */
@@ -52,6 +59,7 @@ export function peekCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig |
     version: 1,
     sourceDir: resolve(config.sourceDir),
     cacheDir: resolve(config.cacheDir ?? resolveSkillCacheDir()),
+    workspaces: normalizeWorkspaces(config.workspaces, env),
   };
 }
 
@@ -68,7 +76,12 @@ export function loadCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig {
   const sourceDir = resolve(config.sourceDir);
   const cacheDir = resolve(config.cacheDir ?? resolveSkillCacheDir());
   validateSourceDir(sourceDir);
-  return { version: 1, sourceDir, cacheDir };
+  return {
+    version: 1,
+    sourceDir,
+    cacheDir,
+    workspaces: normalizeWorkspaces(config.workspaces, env),
+  };
 }
 
 /** 校验并写入 CLI 与 skill 源、缓存目录之间的关联配置。 */
@@ -90,10 +103,108 @@ export function initializeCliConfig(options: {
   if (existsSync(file) && !options.force) {
     throw new Error(`配置已存在：${file}；如需覆盖请使用 --force`);
   }
-  const config: CliConfig = { version: 1, sourceDir, cacheDir };
+  const config: CliConfig = {
+    version: 1,
+    sourceDir,
+    cacheDir,
+    workspaces: normalizeWorkspaces(undefined, options.env ?? process.env),
+  };
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   return config;
+}
+
+/** 添加一个可管理的 Workspace，重复路径保持原配置不变。 */
+export function addManagedWorkspace(
+  workspacePath: string,
+  env: NodeJS.ProcessEnv = process.env,
+): CliConfig {
+  const path = resolveRequiredAbsolutePath(workspacePath, 'Workspace 目录');
+  if (!existsSync(path) || !statSync(path).isDirectory()) {
+    throw new Error(`Workspace 目录不存在：${path}`);
+  }
+  const config = loadCliConfig(env);
+  if (!config.workspaces.some((workspace) => workspace.path === path)) {
+    config.workspaces.push({ path, pinnedTargetIds: [] });
+    writeCliConfig(config, env);
+  }
+  return config;
+}
+
+/** 移除一个 Workspace；用户根目录始终保留为默认管理范围。 */
+export function removeManagedWorkspace(
+  workspacePath: string,
+  env: NodeJS.ProcessEnv = process.env,
+): CliConfig {
+  const path = resolveRequiredAbsolutePath(workspacePath, 'Workspace 目录');
+  const config = loadCliConfig(env);
+  const home = resolveHome(env);
+  if (path !== home) {
+    config.workspaces = config.workspaces.filter((workspace) => workspace.path !== path);
+    writeCliConfig(config, env);
+  }
+  return config;
+}
+
+/** 固定或取消固定 Workspace 中的 Agent；有 skill 的 Agent 无需固定也会展示。 */
+export function setWorkspaceTargetPinned(
+  workspacePath: string,
+  targetId: string,
+  isPinned: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): CliConfig {
+  const path = resolveRequiredAbsolutePath(workspacePath, 'Workspace 目录');
+  const target = getTarget(targetId);
+  const config = loadCliConfig(env);
+  const workspace = config.workspaces.find((item) => item.path === path);
+  if (!workspace) throw new Error(`未管理该 Workspace：${path}`);
+  const pinned = new Set(workspace.pinnedTargetIds);
+  if (isPinned) pinned.add(target.id);
+  else pinned.delete(target.id);
+  workspace.pinnedTargetIds = [...pinned].sort();
+  writeCliConfig(config, env);
+  return config;
+}
+
+/** 兼容旧配置，并确保用户根目录始终位于 Workspace 列表首位。 */
+function normalizeWorkspaces(
+  value: unknown,
+  env: NodeJS.ProcessEnv,
+): ManagedWorkspaceConfig[] {
+  const home = resolveHome(env);
+  const workspaces = new Map<string, ManagedWorkspaceConfig>();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const candidate = item as { path?: unknown; pinnedTargetIds?: unknown };
+      if (typeof candidate.path !== 'string' || !candidate.path.trim()) continue;
+      const path = resolve(candidate.path);
+      const pinnedTargetIds = Array.isArray(candidate.pinnedTargetIds)
+        ? candidate.pinnedTargetIds.flatMap((id) => {
+          if (typeof id !== 'string') return [];
+          try {
+            return [getTarget(id).id];
+          } catch {
+            return [];
+          }
+        })
+        : [];
+      workspaces.set(path, { path, pinnedTargetIds: [...new Set(pinnedTargetIds)].sort() });
+    }
+  }
+  const homeWorkspace = workspaces.get(home) ?? { path: home, pinnedTargetIds: [] };
+  workspaces.delete(home);
+  return [homeWorkspace, ...workspaces.values()];
+}
+
+function resolveHome(env: NodeJS.ProcessEnv): string {
+  return env.HOME ? resolve(env.HOME) : homedir();
+}
+
+function writeCliConfig(config: CliConfig, env: NodeJS.ProcessEnv): void {
+  const file = resolveCliConfigPath(env);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
 /** 源目录缺少配置表时写入带远程示例的 skillctl 前缀文件。 */

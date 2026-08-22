@@ -2,11 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TARGETS, defaultTargetIds, getTarget } from '../src/core/targets.js';
 
-test('TARGETS 包含 7 个 id', () => {
+test('TARGETS 补充常见 Agent 的 Skill 目录', () => {
   assert.deepEqual(
     TARGETS.map((t) => t.id).slice().sort(),
-    ['agents', 'claude', 'codex', 'cursor', 'hermes', 'kiro', 'openclaw'],
+    [
+      'agents',
+      'claude',
+      'codebuddy',
+      'codex',
+      'continue',
+      'copilot',
+      'cursor',
+      'droid',
+      'gemini',
+      'hermes',
+      'kiro',
+      'openclaw',
+      'opencode',
+      'openhands',
+      'qoder',
+      'qoder-cn',
+      'qwen',
+      'roo',
+      'trae',
+      'trae-cn',
+      'windsurf',
+      'workbuddy',
+    ],
   );
+  assert.equal(getTarget('gemini').skillsDir, '.gemini/skills');
+  assert.equal(getTarget('copilot').skillsDir, '.copilot/skills');
+  assert.equal(getTarget('windsurf').skillsDir, '.codeium/windsurf/skills');
+  assert.equal(getTarget('opencode').skillsDir, '.config/opencode/skills');
+  assert.equal(getTarget('trae-cn').skillsDir, '.trae-cn/skills');
+  assert.equal(getTarget('workbuddy').skillsDir, '.workbuddy/skills');
+  assert.equal(getTarget('qoder').skillsDir, '.qoder/skills');
+  assert.equal(getTarget('qoder-cn').skillsDir, '.qoder-cn/skills');
+  assert.equal(getTarget('codebuddy').skillsDir, '.codebuddy/skills');
+  assert.equal(getTarget('qwen').skillsDir, '.qwen/skills');
 });
 
 test('target 只保留 skill 目录信息', () => {

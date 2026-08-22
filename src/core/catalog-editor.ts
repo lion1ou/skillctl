@@ -1,5 +1,8 @@
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
 import {
   addSkillsToRegistry,
+  externalCacheDir,
   findUnregisteredLocalSkills,
   loadSkillCatalog,
   saveSkillCatalog,
@@ -26,6 +29,14 @@ export interface CatalogCategoryPatch {
   description?: string;
 }
 
+export interface CatalogSkillDetail {
+  skill: SkillRecord;
+  category?: CategoryRecord;
+  available: boolean;
+  sourcePath: string;
+  content?: string;
+}
+
 /** 读取配置表、未分类项和尚未登记的本地 skill，供配置页展示。 */
 export function loadCatalogWorkspace(sourceDir: string): CatalogWorkspace {
   const catalog = loadSkillCatalog(sourceDir);
@@ -35,6 +46,41 @@ export function loadCatalogWorkspace(sourceDir: string): CatalogWorkspace {
     catalog,
     unregistered: findUnregisteredLocalSkills(sourceDir, catalog),
     uncategorized: catalog.skills.filter((skill) => !assigned.has(skill.id)),
+  };
+}
+
+/** 读取已登记 Skill 的 SKILL.md，且不允许源路径越过本地源或外部缓存根目录。 */
+export function loadCatalogSkillDetail(
+  sourceDir: string,
+  cacheDir: string,
+  skillId: string,
+): CatalogSkillDetail {
+  const catalog = loadSkillCatalog(sourceDir);
+  const skill = requireSkill(catalog, skillId);
+  const allowedRoot = resolve(skill.type === 'local' ? sourceDir : cacheDir);
+  const skillDir = resolve(
+    skill.type === 'local' ? sourceDir : externalCacheDir(cacheDir, skill),
+    skill.type === 'local' ? skill.source : '.',
+  );
+  if (skillDir !== allowedRoot && !skillDir.startsWith(`${allowedRoot}${sep}`)) {
+    throw new Error('Skill 源路径超出允许目录');
+  }
+  const sourcePath = resolve(skillDir, 'SKILL.md');
+  const category = catalog.categories.find((item) => item.skillIds.includes(skill.id));
+  if (!existsSync(sourcePath)) return { skill, category, available: false, sourcePath };
+
+  const realAllowedRoot = realpathSync(allowedRoot);
+  const realSourcePath = realpathSync(sourcePath);
+  if (!realSourcePath.startsWith(`${realAllowedRoot}${sep}`)) {
+    throw new Error('Skill 源路径超出允许目录');
+  }
+  if (statSync(realSourcePath).size > 512 * 1024) throw new Error('SKILL.md 超过 512 KiB，无法展示');
+  return {
+    skill,
+    category,
+    available: true,
+    sourcePath,
+    content: readFileSync(realSourcePath, 'utf8'),
   };
 }
 
@@ -112,7 +158,7 @@ export function patchCatalogCategory(
 export function removeCatalogCategory(sourceDir: string, categoryId: string): CatalogWorkspace {
   const catalog = loadSkillCatalog(sourceDir);
   const category = requireCategory(catalog, categoryId);
-  if (category.skillIds.length > 0) throw new Error('请先移出分类下的 skill 再删除');
+  if (category.skillIds.length > 0) throw new Error('请先删除分类下的 Skill 登记或调整其分类');
   catalog.categories = catalog.categories.filter((item) => item.id !== categoryId);
   saveSkillCatalog(sourceDir, catalog);
   return loadCatalogWorkspace(sourceDir);

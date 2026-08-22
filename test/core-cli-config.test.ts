@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { CATEGORIES_FILE, SKILLS_FILE } from '../src/core/brand.js';
 import { loadSkillCatalog } from '../src/core/skill-registry.js';
 import {
+  addManagedWorkspace,
   initializeCliConfig,
   loadCliConfig,
+  removeManagedWorkspace,
+  setWorkspaceTargetPinned,
   peekCliConfig,
   resolveCliConfigPath,
   resolveRequiredAbsolutePath,
@@ -33,7 +36,10 @@ test('初始化保存绝对 sourceDir 和 cacheDir，不覆盖已有配置表', 
     repo.writeFile(`catalog/${SKILLS_FILE}`, '{"version":1,"skills":[{"id":"keep"}]}');
     repo.writeFile(`catalog/${CATEGORIES_FILE}`, '{"version":1,"categories":[]}');
     repo.mkdir('catalog/skills');
-    const env = { XDG_CONFIG_HOME: join(repo.root, 'config') } as NodeJS.ProcessEnv;
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
     const cacheDir = join(repo.root, 'cache');
 
     initializeCliConfig({
@@ -46,6 +52,10 @@ test('初始化保存绝对 sourceDir 和 cacheDir，不覆盖已有配置表', 
       version: 1,
       sourceDir: join(repo.root, 'catalog'),
       cacheDir,
+      workspaces: [{
+        path: repo.root,
+        pinnedTargetIds: [],
+      }],
     });
     assert.equal(
       readFileSync(join(repo.root, `catalog/${SKILLS_FILE}`), 'utf8').trim(),
@@ -60,7 +70,10 @@ test('源目录缺少配置表时生成带远程示例的 skillctl 前缀文件'
   const repo = createTmpRepo('skillctl-init-empty-');
   try {
     const sourceDir = join(repo.root, 'catalog');
-    const env = { XDG_CONFIG_HOME: join(repo.root, 'config') } as NodeJS.ProcessEnv;
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
     initializeCliConfig({ sourceDir, cacheDir: join(repo.root, 'cache'), env });
     const catalog = loadSkillCatalog(sourceDir);
     assert.deepEqual(catalog.skills.map((skill) => skill.name), ['find-skills', 'humanizer-zh']);
@@ -76,7 +89,10 @@ test('源目录缺少配置表时生成带远程示例的 skillctl 前缀文件'
 test('peekCliConfig 在配置不存在时返回 null，存在时返回已保存路径', () => {
   const repo = createTmpRepo('skillctl-peek-');
   try {
-    const env = { XDG_CONFIG_HOME: join(repo.root, 'config') } as NodeJS.ProcessEnv;
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
     assert.equal(peekCliConfig(env), null);
     const cacheDir = join(repo.root, 'cache');
     initializeCliConfig({
@@ -88,6 +104,10 @@ test('peekCliConfig 在配置不存在时返回 null，存在时返回已保存�
       version: 1,
       sourceDir: join(repo.root, 'catalog'),
       cacheDir,
+      workspaces: [{
+        path: repo.root,
+        pinnedTargetIds: [],
+      }],
     });
   } finally {
     repo.cleanup();
@@ -144,4 +164,53 @@ test('外部 skill 默认缓存在 CLI 脚本目录 .cache', () => {
     resolveSkillCacheDir(),
     join(fileURLToPath(new URL('..', import.meta.url)), '.cache'),
   );
+});
+
+test('可添加 Workspace 并为其固定要展示的 Agent', () => {
+  const repo = createTmpRepo('skillctl-workspaces-');
+  try {
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
+    const workspace = join(repo.root, 'project');
+    repo.mkdir('project');
+    initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
+
+    addManagedWorkspace(workspace, env);
+    setWorkspaceTargetPinned(workspace, 'cursor', true, env);
+
+    assert.deepEqual(loadCliConfig(env).workspaces, [
+      { path: repo.root, pinnedTargetIds: [] },
+      { path: workspace, pinnedTargetIds: ['cursor'] },
+    ]);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('重复添加 Workspace 去重，用户根目录不能删除', () => {
+  const repo = createTmpRepo('skillctl-workspaces-dedupe-');
+  try {
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
+    const workspace = join(repo.root, 'project');
+    repo.mkdir('project');
+    initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
+
+    addManagedWorkspace(workspace, env);
+    addManagedWorkspace(workspace, env);
+    removeManagedWorkspace(repo.root, env);
+
+    assert.deepEqual(loadCliConfig(env).workspaces.map((item) => item.path), [
+      repo.root,
+      workspace,
+    ]);
+    removeManagedWorkspace(workspace, env);
+    assert.deepEqual(loadCliConfig(env).workspaces.map((item) => item.path), [repo.root]);
+  } finally {
+    repo.cleanup();
+  }
 });

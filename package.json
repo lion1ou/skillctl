@@ -36,7 +36,7 @@
     "skill-ctl": "./bin/run.js"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('node:fs').cpSync('src/ui/assets','dist/ui/assets',{recursive:true})\"",
     "dev": "./bin/dev-session.js",
     "pretest": "pnpm build",
     "test": "node --import tsx --test test/**/*.test.ts",
@@ -52,6 +52,8 @@
     "@clack/core": "^0.3.3",
     "@clack/prompts": "^0.7.0",
     "@oclif/core": "^4.0.0",
+    "baoyu-chrome-cdp": "^0.1.1",
+    "baoyu-md": "^0.1.1",
     "chalk": "^5.3.0",
     "figlet": "^1.7.0"
   },

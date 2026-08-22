@@ -1,10 +1,18 @@
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { homedir } from 'node:os';
-import { loadCliConfig } from './cli-config.js';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  addManagedWorkspace,
+  loadCliConfig,
+  removeManagedWorkspace,
+  setWorkspaceTargetPinned,
+} from './cli-config.js';
 import {
   createCatalogCategory,
+  loadCatalogSkillDetail,
   loadCatalogWorkspace,
   patchCatalogCategory,
   patchCatalogSkill,
@@ -13,24 +21,36 @@ import {
   syncUnregisteredSkills,
 } from './catalog-editor.js';
 import { installCatalogSkills, spawnExternalSkillAdd } from './catalog-install.js';
-import { scanInstalledWorkspace, setManagedSkillEnabled } from './skill-manager.js';
-import { getTarget, type TargetId } from './targets.js';
+import {
+  loadInstalledSkillDetail,
+  removeManagedAgentSkills,
+  scanInstalledWorkspace,
+  setManagedSkillEnabled,
+} from './skill-manager.js';
+import { getTarget, TARGETS, type TargetId } from './targets.js';
+import { pickWorkspaceDirectory } from './workspace-picker.js';
 import { CATALOG_PAGE } from '../ui/catalog-page.js';
 import { MANAGER_PAGE } from '../ui/manager-page.js';
+import { SKILL_DETAIL_PAGE } from '../ui/skill-detail-page.js';
+
+const UI_ASSET_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../ui/assets');
 
 export interface ManagerServer {
   server: Server;
   url: string;
 }
 
-/** 在本机回环地址启动管理服务，并用随机令牌保护写操作与扫描结果。 */
-export async function startManagerServer(options: {
+interface ManagerServerOptions {
   port: number;
-  userRoot?: string;
-}): Promise<ManagerServer> {
+  env?: NodeJS.ProcessEnv;
+  pickWorkspace?: () => Promise<string | null>;
+}
+
+/** 在本机回环地址启动管理服务，并用随机令牌保护写操作与扫描结果。 */
+export async function startManagerServer(options: ManagerServerOptions): Promise<ManagerServer> {
   const token = randomBytes(24).toString('hex');
   const server = createServer((request, response) => {
-    void routeManagerRequest(request, response, token, options.userRoot);
+    void routeManagerRequest(request, response, token, options);
   });
   await new Promise<void>((resolvePromise, reject) => {
     server.once('error', reject);
@@ -48,7 +68,7 @@ async function routeManagerRequest(
   request: IncomingMessage,
   response: ServerResponse,
   token: string,
-  userRoot?: string,
+  options: ManagerServerOptions,
 ): Promise<void> {
   try {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -60,27 +80,95 @@ async function routeManagerRequest(
       sendHtml(response, CATALOG_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
       return;
     }
+    if (request.method === 'GET' && (url.pathname === '/catalog/skill' || url.pathname === '/skill')) {
+      sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
+      return;
+    }
+    if (request.method === 'GET' && (
+      url.pathname === '/assets/skillctl-icon.png' || url.pathname === '/favicon.ico'
+    )) {
+      sendBinary(response, readFileSync(resolve(UI_ASSET_DIR, 'skillctl-icon.png')), 'image/png');
+      return;
+    }
     if (request.headers['x-skillctl-token'] !== token) {
       sendText(response, 403, '无权访问本机 Skill');
       return;
     }
-    if (await routeInstalledApi(request, response, url, userRoot)) return;
-    if (await routeCatalogApi(request, response, url)) return;
+    if (await routeWorkspaceApi(request, response, url, options)) return;
+    if (await routeInstalledApi(request, response, url, options.env)) return;
+    if (await routeCatalogApi(request, response, url, options.env)) return;
     sendText(response, 404, 'Not Found');
   } catch (error) {
     sendText(response, 400, error instanceof Error ? error.message : '请求处理失败');
   }
 }
 
-/** 处理已安装 Agent 扫描、文件启停和按分类安装。 */
+/** 处理 Workspace 列表、系统目录选择器和 Agent 固定状态。 */
+async function routeWorkspaceApi(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  options: ManagerServerOptions,
+): Promise<boolean> {
+  const env = options.env ?? process.env;
+  if (request.method === 'GET' && url.pathname === '/api/workspaces') {
+    sendWorkspaceConfig(response, env);
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/workspaces/pick') {
+    const selected = await (options.pickWorkspace ?? pickWorkspaceDirectory)();
+    if (selected) addManagedWorkspace(selected, env);
+    sendWorkspaceConfig(response, env, selected);
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/workspaces') {
+    const input = await readJson(request, 4096);
+    const selected = readString(input.path, 'path');
+    addManagedWorkspace(selected, env);
+    sendWorkspaceConfig(response, env, resolve(selected));
+    return true;
+  }
+  if (request.method === 'DELETE' && url.pathname === '/api/workspaces') {
+    removeManagedWorkspace(readString(url.searchParams.get('path'), 'path'), env);
+    sendWorkspaceConfig(response, env);
+    return true;
+  }
+  if (request.method === 'PATCH' && url.pathname === '/api/workspaces/targets') {
+    const input = await readJson(request, 4096);
+    if (typeof input.isPinned !== 'boolean') throw new Error('isPinned 必须是布尔值');
+    setWorkspaceTargetPinned(
+      readString(input.workspace, 'workspace'),
+      readString(input.target, 'target'),
+      input.isPinned,
+      env,
+    );
+    sendWorkspaceConfig(response, env);
+    return true;
+  }
+  return false;
+}
+
+/** 处理当前 Workspace 的 Agent 扫描、文件启停和按分类安装。 */
 async function routeInstalledApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  userRoot?: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
   if (request.method === 'GET' && url.pathname === '/api/skills') {
-    sendJson(response, scanInstalledWorkspace(userRoot));
+    const workspace = readManagedWorkspace(url.searchParams.get('workspace'), env);
+    sendJson(response, scanInstalledWorkspace(workspace));
+    return true;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/skills/detail') {
+    const workspace = readManagedWorkspace(url.searchParams.get('workspace'), env);
+    const target = readString(url.searchParams.get('target'), 'target') as TargetId;
+    getTarget(target);
+    sendJson(response, loadInstalledSkillDetail({
+      workspaceRoot: workspace,
+      target,
+      relativeDir: readString(url.searchParams.get('relativeDir'), 'relativeDir'),
+    }));
     return true;
   }
   if (request.method === 'PATCH' && url.pathname === '/api/skills/toggle') {
@@ -90,12 +178,26 @@ async function routeInstalledApi(
     }
     if (typeof input.isEnabled !== 'boolean') throw new Error('isEnabled 必须是布尔值');
     getTarget(input.target);
+    const workspace = readManagedWorkspace(input.workspace, env);
     sendJson(response, setManagedSkillEnabled({
-      userRoot,
+      workspaceRoot: workspace,
       target: input.target as TargetId,
       relativeDir: input.relativeDir,
       isEnabled: input.isEnabled,
     }));
+    return true;
+  }
+  if (request.method === 'DELETE' && url.pathname === '/api/skills/agent') {
+    const input = await readJson(request, 4096);
+    const workspace = readManagedWorkspace(input.workspace, env);
+    const target = readString(input.target, 'target') as TargetId;
+    getTarget(target);
+    const removal = removeManagedAgentSkills({ workspaceRoot: workspace, target });
+    setWorkspaceTargetPinned(workspace, target, false, env);
+    sendJson(response, {
+      ...scanInstalledWorkspace(workspace),
+      removal: { removed: removal.removed, target },
+    });
     return true;
   }
   if (request.method === 'POST' && url.pathname === '/api/skills/install') {
@@ -104,11 +206,12 @@ async function routeInstalledApi(
     const mode = input.mode === 'copy' ? 'copy' : 'symlink';
     const categoryIds = asStringArray(input.categoryIds);
     const skillIds = asStringArray(input.skillIds);
-    const { sourceDir, cacheDir } = loadCliConfig();
+    const workspace = readManagedWorkspace(input.workspace, env);
+    const { sourceDir, cacheDir } = loadCliConfig(env);
     const result = await installCatalogSkills({
       sourceDir,
       cacheDir,
-      scopeRoot: userRoot ?? homedir(),
+      scopeRoot: workspace,
       targets: [input.target as TargetId],
       selection: { categoryIds, skillIds },
       mode,
@@ -118,7 +221,7 @@ async function routeInstalledApi(
       },
     });
     sendJson(response, {
-      ...scanInstalledWorkspace(userRoot),
+      ...scanInstalledWorkspace(workspace),
       install: result,
     });
     return true;
@@ -131,10 +234,16 @@ async function routeCatalogApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
-  const sourceDir = loadCliConfig().sourceDir;
+  const sourceDir = loadCliConfig(env).sourceDir;
   if (request.method === 'GET' && url.pathname === '/api/catalog') {
     sendJson(response, loadCatalogWorkspace(sourceDir));
+    return true;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/catalog/skills/detail') {
+    const { cacheDir } = loadCliConfig(env);
+    sendJson(response, loadCatalogSkillDetail(sourceDir, cacheDir, queryId(url)));
     return true;
   }
   if (request.method === 'PATCH' && url.pathname === '/api/catalog/skills') {
@@ -180,6 +289,24 @@ async function routeCatalogApi(
     return true;
   }
   return false;
+}
+
+function readManagedWorkspace(value: unknown, env: NodeJS.ProcessEnv): string {
+  const path = resolve(readString(value, 'workspace'));
+  const config = loadCliConfig(env);
+  if (!config.workspaces.some((workspace) => workspace.path === path)) {
+    throw new Error(`未管理该 Workspace：${path}`);
+  }
+  return path;
+}
+
+function sendWorkspaceConfig(
+  response: ServerResponse,
+  env: NodeJS.ProcessEnv,
+  selectedWorkspace?: string | null,
+): void {
+  const { workspaces } = loadCliConfig(env);
+  sendJson(response, { workspaces, targets: TARGETS, selectedWorkspace: selectedWorkspace ?? null });
 }
 
 /** 限制请求体大小并解析 JSON，避免本地服务接受超大或非法负载。 */
@@ -246,10 +373,19 @@ function sendJson(response: ServerResponse, value: unknown): void {
 function sendHtml(response: ServerResponse, html: string): void {
   response.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
-    'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+    'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:",
     'cache-control': 'no-store',
   });
   response.end(html);
+}
+
+/** 返回打包内静态资源，并允许浏览器短时缓存。 */
+function sendBinary(response: ServerResponse, value: Buffer, contentType: string): void {
+  response.writeHead(200, {
+    'content-type': contentType,
+    'cache-control': 'public, max-age=3600',
+  });
+  response.end(value);
 }
 
 /** 以纯文本返回明确的 HTTP 错误。 */

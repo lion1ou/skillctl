@@ -5,7 +5,9 @@ import {
   readdirSync,
   realpathSync,
   renameSync,
+  rmSync,
   statSync,
+  unlinkSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -39,18 +41,25 @@ export interface ManagedAgent {
 }
 
 export interface InstalledWorkspace {
-  userRoot: string;
+  workspaceRoot: string;
   agents: ManagedAgent[];
   skills: ManagedSkill[];
 }
 
-/** 扫描用户根目录，汇总已落地 Agent 目录、skills 目录和其中的 skill。 */
-export function scanInstalledWorkspace(userRoot = homedir()): InstalledWorkspace {
-  const skills = scanManagedSkills(userRoot);
+export interface InstalledSkillDetail {
+  skill: ManagedSkill;
+  available: boolean;
+  sourcePath: string;
+  content?: string;
+}
+
+/** 扫描 Workspace，汇总已落地 Agent 目录、skills 目录和其中的 skill。 */
+export function scanInstalledWorkspace(workspaceRoot = homedir()): InstalledWorkspace {
+  const skills = scanManagedSkills(workspaceRoot);
   const agents = TARGETS.map((target) => {
     const agentDir = dirname(target.skillsDir);
-    const agentPath = join(userRoot, agentDir);
-    const skillsPath = join(userRoot, target.skillsDir);
+    const agentPath = join(workspaceRoot, agentDir);
+    const skillsPath = join(workspaceRoot, target.skillsDir);
     const targetSkills = skills.filter((skill) => skill.target === target.id);
     return {
       id: target.id,
@@ -64,45 +73,110 @@ export function scanInstalledWorkspace(userRoot = homedir()): InstalledWorkspace
     };
   }).sort((left, right) =>
     Number(right.detected) - Number(left.detected) || left.id.localeCompare(right.id));
-  return { userRoot, agents, skills };
+  return { workspaceRoot, agents, skills };
 }
 
-/** 扫描用户根目录中所有 target，汇总可视化管理所需的 skill 状态。 */
-export function scanManagedSkills(userRoot = homedir()): ManagedSkill[] {
+/** 扫描 Workspace 中所有 target，汇总可视化管理所需的 skill 状态。 */
+export function scanManagedSkills(workspaceRoot = homedir()): ManagedSkill[] {
   const skills: ManagedSkill[] = [];
   for (const target of TARGETS) {
-    const targetRoot = join(userRoot, target.skillsDir);
+    const targetRoot = join(workspaceRoot, target.skillsDir);
     if (!existsSync(targetRoot)) continue;
     scanTargetDirectory(target.id, targetRoot, targetRoot, skills, new Set(), 0);
   }
   return skills.sort((left, right) =>
-    left.target.localeCompare(right.target) || left.name.localeCompare(right.name));
+    left.target.localeCompare(right.target) ||
+    Number(right.isEnabled) - Number(left.isEnabled) ||
+    left.name.localeCompare(right.name));
 }
 
 /** 在固定 target 根目录内切换 SKILL.md 文件名，阻止路径越界操作。 */
 export function setManagedSkillEnabled(input: {
-  userRoot?: string;
+  workspaceRoot?: string;
   target: TargetId;
   relativeDir: string;
   isEnabled: boolean;
 }): InstalledWorkspace {
-  const userRoot = input.userRoot ?? homedir();
-  const targetRoot = resolve(userRoot, getTarget(input.target).skillsDir);
+  const workspaceRoot = input.workspaceRoot ?? homedir();
+  const targetRoot = resolve(workspaceRoot, getTarget(input.target).skillsDir);
   const skillDir = resolve(targetRoot, input.relativeDir);
   if (skillDir !== targetRoot && !skillDir.startsWith(`${targetRoot}${sep}`)) {
     throw new Error('skill 路径超出 target 根目录');
   }
-  const knownSkill = scanManagedSkills(userRoot).some((skill) =>
+  const knownSkill = scanManagedSkills(workspaceRoot).some((skill) =>
     skill.target === input.target && skill.relativeDir === input.relativeDir);
   if (!knownSkill) throw new Error('未找到要管理的 skill');
 
   const sourceFile = join(skillDir, input.isEnabled ? DISABLED_FILE : ENABLED_FILE);
   const destinationFile = join(skillDir, input.isEnabled ? ENABLED_FILE : DISABLED_FILE);
-  if (existsSync(destinationFile) && !existsSync(sourceFile)) return scanInstalledWorkspace(userRoot);
+  if (existsSync(destinationFile) && !existsSync(sourceFile)) {
+    return scanInstalledWorkspace(workspaceRoot);
+  }
   if (!existsSync(sourceFile)) throw new Error(`缺少待改名文件：${sourceFile}`);
   if (existsSync(destinationFile)) throw new Error(`启用和禁用文件同时存在：${skillDir}`);
   renameSync(sourceFile, destinationFile);
-  return scanInstalledWorkspace(userRoot);
+  return scanInstalledWorkspace(workspaceRoot);
+}
+
+/** 删除白名单 Agent 的 skills 根目录；根目录为软链时仅移除链接本身。 */
+export function removeManagedAgentSkills(input: {
+  workspaceRoot?: string;
+  target: TargetId;
+}): { removed: boolean; skillsPath: string } {
+  const workspaceRoot = resolve(input.workspaceRoot ?? homedir());
+  const skillsPath = resolve(workspaceRoot, getTarget(input.target).skillsDir);
+  if (skillsPath === workspaceRoot || !skillsPath.startsWith(`${workspaceRoot}${sep}`)) {
+    throw new Error('Agent skills 路径超出 Workspace');
+  }
+  let pathState: ReturnType<typeof lstatSync>;
+  try {
+    pathState = lstatSync(skillsPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { removed: false, skillsPath };
+    throw error;
+  }
+  if (pathState.isSymbolicLink()) {
+    unlinkSync(skillsPath);
+  } else {
+    rmSync(skillsPath, { recursive: true });
+  }
+  return { removed: true, skillsPath };
+}
+
+/** 读取已落地 Skill 的 SKILL.md；软链只读目标文件，不允许文件路径逃出 Skill 目录。 */
+export function loadInstalledSkillDetail(input: {
+  workspaceRoot?: string;
+  target: TargetId;
+  relativeDir: string;
+}): InstalledSkillDetail {
+  const workspaceRoot = input.workspaceRoot ?? homedir();
+  const targetRoot = resolve(workspaceRoot, getTarget(input.target).skillsDir);
+  const skillDir = resolve(targetRoot, input.relativeDir);
+  if (skillDir !== targetRoot && !skillDir.startsWith(`${targetRoot}${sep}`)) {
+    throw new Error('skill 路径超出 target 根目录');
+  }
+  const skill = scanManagedSkills(workspaceRoot).find((item) =>
+    item.target === input.target && item.relativeDir === input.relativeDir);
+  if (!skill) throw new Error('未找到要管理的 skill');
+
+  const marker = resolveSkillMarker(skill.installedPath);
+  const sourcePath = join(skill.installedPath, marker?.file ?? ENABLED_FILE);
+  if (!marker || !existsSync(sourcePath)) {
+    return { skill, available: false, sourcePath };
+  }
+
+  const realSkillDir = realpathSync(skill.installedPath);
+  const realSourcePath = realpathSync(sourcePath);
+  if (realSourcePath !== realSkillDir && !realSourcePath.startsWith(`${realSkillDir}${sep}`)) {
+    throw new Error('Skill 源路径超出允许目录');
+  }
+  if (statSync(realSourcePath).size > 512 * 1024) throw new Error('SKILL.md 超过 512 KiB，无法展示');
+  return {
+    skill,
+    available: true,
+    sourcePath,
+    content: readFileSync(realSourcePath, 'utf8'),
+  };
 }
 
 /** 递归识别分类目录和软链目录，遇到 skill 根目录后停止向下扫描。 */

@@ -3,7 +3,7 @@ import * as p from '@clack/prompts';
 import { renderBanner } from '../ui/banner.js';
 import { style } from '../ui/style.js';
 
-type Choice = 'init' | 'install' | 'add' | 'exit';
+type Choice = 'init' | 'install' | 'add' | 'manage' | 'exit';
 
 export default class Welcome extends Command {
   static override hidden = true;
@@ -21,6 +21,7 @@ export default class Welcome extends Command {
       { value: 'init', label: 'init     ' + style.dim('配置源目录和缓存目录') },
       { value: 'install', label: 'install  ' + style.dim('检查、准备并安装已登记 skill') },
       { value: 'add', label: 'add      ' + style.dim('把本地或 skills.sh skill 加入配置表') },
+      { value: 'manage', label: 'manage   ' + style.dim('打开 Workspace 与已安装 Skill 管理页') },
       { value: 'exit', label: '退出' },
     ];
     const choice = await p.select({

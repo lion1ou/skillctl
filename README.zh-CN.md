@@ -89,9 +89,11 @@ skill-ctl manage
 skill-ctl manage --port 4173 --no-open
 ```
 
-- `/` 已安装 Skill：扫描用户根目录，列出已检测到的 Agent、对应文件夹和 skills 目录；选择某个 Agent 后查看其中已落地的 Skill。可按配置表分类安装到当前 Agent；启停通过 `SKILL.md` ↔ `SKILL.md.disable`。
+- `/` 已安装 Skill：默认扫描用户根目录，也可通过系统目录选择器或绝对路径添加项目 Workspace。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。
+- 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent；启停通过 `SKILL.md` ↔ `SKILL.md.disable`。
 - `/catalog` 配置表：可视化编辑 `skillctl-skills.json` 与 `skillctl-categories.json`，可改分类、描述、安装启用开关，并把源目录中未登记的本地 skill 同步进配置表。这里的启用只影响 `install`，不会改已安装文件。
-- 已安装页可按名称和启用状态筛选，每 3 秒同步一次文件系统变化。
+- 已安装页可按名称和启用状态筛选，每 3 秒同步一次文件系统变化；已启用 Skill 默认排在未启用项之前。
+- Workspace 列表和固定展示的 Agent 保存在 `~/.config/skillctl/config.json`；移除 Workspace 只移除管理记录，不删除项目文件。
 - 软链 skill 的文件启停会修改真实来源，并影响其他指向同一来源的链接，页面操作前会明确确认。
 - 服务只监听回环地址，API 使用启动时生成的随机令牌校验请求。
 
@@ -127,6 +129,21 @@ skill-ctl manage --port 4173 --no-open
 | codex | `.codex/skills` |
 | openclaw | `.openclaw/skills` |
 | hermes | `.hermes/skills` |
+| gemini | `.gemini/skills` |
+| copilot | `.copilot/skills` |
+| windsurf | `.codeium/windsurf/skills` |
+| roo | `.roo/skills` |
+| opencode | `.config/opencode/skills` |
+| openhands | `.openhands/skills` |
+| droid | `.factory/skills` |
+| continue | `.continue/skills` |
+| trae | `.trae/skills` |
+| trae-cn | `.trae-cn/skills` |
+| workbuddy | `.workbuddy/skills` |
+| qoder | `.qoder/skills` |
+| qoder-cn | `.qoder-cn/skills` |
+| codebuddy | `.codebuddy/skills` |
+| qwen | `.qwen/skills` |
 
 每个 target 的 skills 目录写入 `.skillctl.json`。CLI 不安装 Rule 和 MCP。
 

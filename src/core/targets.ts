@@ -5,7 +5,22 @@ export type TargetId =
   | 'agents'
   | 'codex'
   | 'openclaw'
-  | 'hermes';
+  | 'hermes'
+  | 'gemini'
+  | 'copilot'
+  | 'windsurf'
+  | 'roo'
+  | 'opencode'
+  | 'openhands'
+  | 'droid'
+  | 'continue'
+  | 'trae'
+  | 'trae-cn'
+  | 'workbuddy'
+  | 'qoder'
+  | 'qoder-cn'
+  | 'codebuddy'
+  | 'qwen';
 
 export interface Target {
   id: TargetId;
@@ -40,6 +55,66 @@ export const TARGETS: readonly Target[] = [
   {
     id: 'hermes',
     skillsDir: '.hermes/skills',
+  },
+  {
+    id: 'gemini',
+    skillsDir: '.gemini/skills',
+  },
+  {
+    id: 'copilot',
+    skillsDir: '.copilot/skills',
+  },
+  {
+    id: 'windsurf',
+    skillsDir: '.codeium/windsurf/skills',
+  },
+  {
+    id: 'roo',
+    skillsDir: '.roo/skills',
+  },
+  {
+    id: 'opencode',
+    skillsDir: '.config/opencode/skills',
+  },
+  {
+    id: 'openhands',
+    skillsDir: '.openhands/skills',
+  },
+  {
+    id: 'droid',
+    skillsDir: '.factory/skills',
+  },
+  {
+    id: 'continue',
+    skillsDir: '.continue/skills',
+  },
+  {
+    id: 'trae',
+    skillsDir: '.trae/skills',
+  },
+  {
+    id: 'trae-cn',
+    skillsDir: '.trae-cn/skills',
+  },
+  {
+    id: 'workbuddy',
+    skillsDir: '.workbuddy/skills',
+  },
+  {
+    id: 'qoder',
+    skillsDir: '.qoder/skills',
+  },
+  {
+    id: 'qoder-cn',
+    skillsDir: '.qoder-cn/skills',
+  },
+  {
+    id: 'codebuddy',
+    skillsDir: '.codebuddy/skills',
+  },
+  {
+    id: 'qwen',
+    skillsDir: '.qwen/skills',
   },
 ];
 

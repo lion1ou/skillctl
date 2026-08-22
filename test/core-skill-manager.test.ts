@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, realpathSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import {
-  scanInstalledWorkspace,
-  scanManagedSkills,
-  setManagedSkillEnabled,
-} from '../src/core/skill-manager.js';
+import * as skillManager from '../src/core/skill-manager.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
+
+const { scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
 
 test('扫描各 target 的启用、禁用和软链 skill', () => {
   const repo = createTmpRepo('skillctl-manager-scan-');
@@ -69,7 +67,7 @@ test('启停通过 SKILL.md 与 SKILL.md.disable 互相改名', () => {
     ].join('\n'));
 
     let workspace = setManagedSkillEnabled({
-      userRoot: repo.root,
+      workspaceRoot: repo.root,
       target: 'codex',
       relativeDir: 'review',
       isEnabled: false,
@@ -78,7 +76,7 @@ test('启停通过 SKILL.md 与 SKILL.md.disable 互相改名', () => {
     assert.equal(existsSync(join(repo.root, '.codex/skills/review/SKILL.md.disable')), true);
 
     workspace = setManagedSkillEnabled({
-      userRoot: repo.root,
+      workspaceRoot: repo.root,
       target: 'codex',
       relativeDir: 'review',
       isEnabled: true,
@@ -112,16 +110,211 @@ test('扫描时正确提取 YAML 多行 description，而不是 |', () => {
   }
 });
 
+test('同一 Agent 内已启用 Skill 排在未启用 Skill 前面', () => {
+  const repo = createTmpRepo('skillctl-manager-sort-');
+  try {
+    repo.writeFile('.agents/skills/a-disabled/SKILL.md.disable', '# disabled');
+    repo.writeFile('.agents/skills/z-enabled/SKILL.md', '# enabled');
+
+    const skills = scanManagedSkills(repo.root);
+
+    assert.deepEqual(skills.map((skill) => [skill.name, skill.isEnabled]), [
+      ['z-enabled', true],
+      ['a-disabled', false],
+    ]);
+  } finally {
+    repo.cleanup();
+  }
+});
+
 test('启停接口拒绝越过 target 根目录', () => {
   const repo = createTmpRepo('skillctl-manager-path-');
   try {
     repo.writeFile('.agents/skills/safe/SKILL.md', '# safe');
     assert.throws(() => setManagedSkillEnabled({
-      userRoot: repo.root,
+      workspaceRoot: repo.root,
       target: 'agents',
       relativeDir: '../../outside',
       isEnabled: false,
     }), /超出 target 根目录/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('删除 Agent skills 目录时保留软链接源', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-agent-');
+  const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
+    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean; skillsPath: string })
+    | undefined;
+  try {
+    repo.writeFile('sources/linked/SKILL.md', '# linked');
+    repo.writeFile('.cursor/skills/copied/SKILL.md', '# copied');
+    symlinkSync(
+      join(repo.root, 'sources/linked'),
+      join(repo.root, '.cursor/skills/linked'),
+      'dir',
+    );
+
+    assert.equal(typeof removeManagedAgentSkills, 'function');
+    const result = removeManagedAgentSkills?.({ workspaceRoot: repo.root, target: 'cursor' });
+
+    assert.equal(result?.removed, true);
+    assert.equal(result?.skillsPath, join(repo.root, '.cursor/skills'));
+    assert.equal(existsSync(join(repo.root, '.cursor/skills')), false);
+    assert.equal(existsSync(join(repo.root, 'sources/linked/SKILL.md')), true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('删除不存在的 Agent skills 目录保持幂等', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-missing-');
+  const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
+    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean })
+    | undefined;
+  try {
+    assert.equal(typeof removeManagedAgentSkills, 'function');
+    assert.equal(removeManagedAgentSkills?.({
+      workspaceRoot: repo.root,
+      target: 'gemini',
+    }).removed, false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Agent skills 根目录为软链接时只删除链接', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-root-link-');
+  const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
+    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean })
+    | undefined;
+  try {
+    repo.writeFile('sources/cursor/review/SKILL.md', '# review');
+    repo.mkdir('.cursor');
+    symlinkSync(join(repo.root, 'sources/cursor'), join(repo.root, '.cursor/skills'), 'dir');
+
+    assert.equal(removeManagedAgentSkills?.({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+    }).removed, true);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills')), false);
+    assert.equal(existsSync(join(repo.root, 'sources/cursor/review/SKILL.md')), true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Agent skills 根目录为断开的软链接时仍删除链接', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-broken-link-');
+  const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
+    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean })
+    | undefined;
+  try {
+    repo.mkdir('.cursor');
+    const skillsPath = join(repo.root, '.cursor/skills');
+    symlinkSync(join(repo.root, 'missing-source'), skillsPath, 'dir');
+
+    assert.equal(removeManagedAgentSkills?.({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+    }).removed, true);
+    assert.throws(() => lstatSync(skillsPath), /ENOENT/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('读取已安装 Skill 的 SKILL.md，禁用文件与软链内容均可展示', () => {
+  const repo = createTmpRepo('skillctl-manager-detail-');
+  const loadInstalledSkillDetail = Reflect.get(skillManager, 'loadInstalledSkillDetail') as
+    | ((input: {
+      workspaceRoot: string;
+      target: string;
+      relativeDir: string;
+    }) => {
+      available: boolean;
+      sourcePath: string;
+      content?: string;
+      skill: { name: string; isEnabled: boolean; isSymlink: boolean };
+    })
+    | undefined;
+  try {
+    repo.writeFile('.codex/skills/review/SKILL.md', [
+      '---',
+      'name: review',
+      'description: 审查代码',
+      '---',
+      '# Review body',
+    ].join('\n'));
+    repo.writeFile('.agents/skills/group/disabled/SKILL.md.disable', [
+      '---',
+      'name: disabled',
+      'description: 已关闭能力',
+      '---',
+      '# Disabled body',
+    ].join('\n'));
+    repo.writeFile('sources/linked/SKILL.md', [
+      '---',
+      'name: linked',
+      'description: 软链能力',
+      '---',
+      '# Linked body',
+    ].join('\n'));
+    repo.mkdir('.cursor/skills');
+    symlinkSync(
+      join(repo.root, 'sources/linked'),
+      join(repo.root, '.cursor/skills/linked'),
+      'dir',
+    );
+
+    assert.equal(typeof loadInstalledSkillDetail, 'function');
+    const enabled = loadInstalledSkillDetail?.({
+      workspaceRoot: repo.root,
+      target: 'codex',
+      relativeDir: 'review',
+    });
+    assert.equal(enabled?.available, true);
+    assert.equal(enabled?.skill.name, 'review');
+    assert.equal(enabled?.skill.isEnabled, true);
+    assert.match(enabled?.content ?? '', /# Review body/);
+    assert.match(enabled?.sourcePath ?? '', /SKILL\.md$/);
+
+    const disabled = loadInstalledSkillDetail?.({
+      workspaceRoot: repo.root,
+      target: 'agents',
+      relativeDir: 'group/disabled',
+    });
+    assert.equal(disabled?.available, true);
+    assert.equal(disabled?.skill.isEnabled, false);
+    assert.match(disabled?.content ?? '', /# Disabled body/);
+    assert.match(disabled?.sourcePath ?? '', /SKILL\.md\.disable$/);
+
+    const linked = loadInstalledSkillDetail?.({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'linked',
+    });
+    assert.equal(linked?.available, true);
+    assert.equal(linked?.skill.isSymlink, true);
+    assert.match(linked?.content ?? '', /# Linked body/);
+
+    assert.throws(
+      () => loadInstalledSkillDetail?.({
+        workspaceRoot: repo.root,
+        target: 'codex',
+        relativeDir: '../secret',
+      }),
+      /超出/,
+    );
+    assert.throws(
+      () => loadInstalledSkillDetail?.({
+        workspaceRoot: repo.root,
+        target: 'codex',
+        relativeDir: 'missing',
+      }),
+      /未找到/,
+    );
   } finally {
     repo.cleanup();
   }
