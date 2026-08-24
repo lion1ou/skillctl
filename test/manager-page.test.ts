@@ -142,6 +142,16 @@ test('分类详情使用等距字段和完整描述输入框', () => {
   assert.match(CATALOG_PAGE, /editCategoryDescription[\s\S]*scrollHeight/);
 });
 
+test('待同步列表逐行展示名称与截断描述，复选框不被全局输入样式撑开', () => {
+  assert.match(CATALOG_PAGE, /<div class="sync-list" id="syncList">/);
+  assert.match(CATALOG_PAGE, /class="sync-name"/);
+  assert.match(CATALOG_PAGE, /class="sync-desc"/);
+  assert.match(MANAGER_STYLES, /\.sync-list input\{[^}]*width:16px;height:16px[^}]*flex:none/);
+  assert.match(MANAGER_STYLES, /\.sync-list\{[^}]*overflow:auto/);
+  assert.match(MANAGER_STYLES, /\.sync-desc\{[^}]*-webkit-line-clamp:2/);
+  assert.match(MANAGER_STYLES, /\.sync \.actions select\{flex:0 1 240px\}/);
+});
+
 test('目录删除文案不再使用移出', () => {
   assert.doesNotMatch(CATALOG_PAGE, /移出/);
   assert.match(CATALOG_PAGE, />删除<\/button>/);

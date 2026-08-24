@@ -132,7 +132,7 @@ export const CATALOG_PAGE = `<!doctype html>
   <section class="sync panel" id="syncPanel" hidden>
     <h2>待同步 Skill</h2>
     <p class="subtitle" id="syncHint"></p>
-    <div id="syncList"></div>
+    <div class="sync-list" id="syncList"></div>
     <div class="actions">
       <select id="syncCategory"></select>
       <button id="syncButton">同步</button>
@@ -264,7 +264,7 @@ function render(){
   else{
     syncPanel.hidden=false;
     document.querySelector('#syncHint').textContent='源目录 skills/ 中发现尚未写入配置表的本地 Skill。';
-    document.querySelector('#syncList').innerHTML=workspace.unregistered.map((skill)=>'<label><input type="checkbox" name="syncSkill" value="'+escapeHtml(skill.id)+'" checked><span>'+escapeHtml(skill.name)+' · '+escapeHtml(skill.description)+'</span></label>').join('');
+    document.querySelector('#syncList').innerHTML=workspace.unregistered.map((skill)=>'<label><input type="checkbox" name="syncSkill" value="'+escapeHtml(skill.id)+'" checked><span><span class="sync-name">'+escapeHtml(skill.name)+'</span><span class="sync-desc" title="'+escapeHtml(skill.description)+'">'+escapeHtml(skill.description)+'</span></span></label>').join('');
   }
   const skills=visibleSkills();
   if(skills.length===0){grid.innerHTML='<div class="empty">没有符合条件的配置项</div>';return}

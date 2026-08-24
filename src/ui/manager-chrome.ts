@@ -77,7 +77,13 @@ export const MANAGER_STYLES = `
     .init-form label{display:grid;gap:6px;margin:12px 0;color:#555A5D}.init-form label span{font-size:12px;color:var(--muted)}
     .init-form .config-path{margin-top:14px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
     .init-form .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.init-form .actions button{flex:0 0 auto}
-    .sync{margin-bottom:14px}.sync label{display:flex;gap:8px;align-items:center;margin:6px 0;color:#555A5D}
+    .sync{margin-bottom:14px}
+    .sync-list{display:grid;gap:6px;max-height:228px;overflow:auto;margin:10px 0 0}
+    .sync-list label{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:6px}
+    .sync-list input{width:16px;height:16px;margin-top:2px;flex:none}.sync-list label>span{flex:1;min-width:0}
+    .sync-name{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+    .sync-desc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+    .sync .actions{justify-content:flex-end}.sync .actions select{flex:0 1 240px}.sync .actions button{flex:0 0 auto}
     form .row{display:grid;gap:8px;margin-bottom:10px}
     @media(max-width:860px){
       body{min-height:100%}main{width:min(100% - 24px,720px);height:auto;min-height:100dvh;padding-top:12px}.page-header,.layout,.toolbar{display:block}.page-header .summary{width:100%;margin-top:12px;text-align:left}.summary{margin-top:12px}
