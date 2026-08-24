@@ -1,12 +1,31 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Script } from 'node:vm';
 import * as catalogPage from '../src/ui/catalog-page.js';
 import { MANAGER_STYLES } from '../src/ui/manager-chrome.js';
 import * as managerPage from '../src/ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../src/ui/skill-detail-page.js';
 
 const { CATALOG_PAGE } = catalogPage;
-const { MANAGER_PAGE } = managerPage;
+const { MANAGER_PAGE, visibleAgentsForWorkspace } = managerPage;
+
+function inlineScripts(page: string): string[] {
+  return [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+}
+
+test('页面内联脚本可以被解析，不会因为转义丢失而整段失效', () => {
+  for (const [name, page] of [
+    ['MANAGER_PAGE', MANAGER_PAGE],
+    ['CATALOG_PAGE', CATALOG_PAGE],
+    ['SKILL_DETAIL_PAGE', SKILL_DETAIL_PAGE],
+  ] as const) {
+    const scripts = inlineScripts(page);
+    assert.ok(scripts.length > 0, `${name} 缺少内联脚本`);
+    for (const source of scripts) {
+      assert.doesNotThrow(() => new Script(source), `${name} 内联脚本存在语法错误`);
+    }
+  }
+});
 
 test('安装管理页把新增与安装操作放在各自上下文中', () => {
   assert.match(MANAGER_PAGE, /id="workspaceTabs"/);
@@ -15,6 +34,8 @@ test('安装管理页把新增与安装操作放在各自上下文中', () => {
   assert.match(MANAGER_PAGE, /class="panel-heading"[\s\S]*id="addAgentButton"[\s\S]*<\/div>/);
   assert.match(MANAGER_PAGE, /class="toolbar installed-toolbar"[\s\S]*id="installButton"[\s\S]*<\/div>/);
   assert.match(MANAGER_PAGE, /<dialog id="installDialog"/);
+  assert.match(MANAGER_PAGE, /id="installLog"/);
+  assert.match(MANAGER_PAGE, /streamInstall\(/);
   assert.doesNotMatch(MANAGER_PAGE, /id="installPanel"/);
 });
 
@@ -71,7 +92,33 @@ test('Agent 路径省略 Workspace 前缀并支持批量复选固定', () => {
   assert.match(MANAGER_PAGE, /'…\/'\+agent\.skillsDir/);
   assert.match(MANAGER_PAGE, /name="agentTarget"/);
   assert.match(MANAGER_PAGE, /type="checkbox"/);
+  assert.doesNotMatch(MANAGER_PAGE, /skillCount>0\|\|pinned/);
   assert.doesNotMatch(MANAGER_PAGE, /<select id="agentTarget"/);
+});
+
+test('安装管理页展示扫描到的 Agent，并合并已固定但未落地的 Agent', () => {
+  const agents = visibleAgentsForWorkspace({
+    workspaceRoot: '/Users/demo/project',
+    agents: [{
+      id: 'cursor',
+      agentDir: '.cursor',
+      agentPath: '/Users/demo/project/.cursor',
+      skillsDir: '.cursor/skills',
+      skillsPath: '/Users/demo/project/.cursor/skills',
+      detected: true,
+      skillCount: 0,
+      enabledCount: 0,
+    }],
+    pinnedTargetIds: ['codex'],
+    targets: [
+      { id: 'cursor', skillsDir: '.cursor/skills' },
+      { id: 'codex', skillsDir: '.codex/skills' },
+    ],
+  });
+
+  assert.deepEqual(agents.map((agent) => agent.id), ['codex', 'cursor']);
+  assert.equal(agents.find((agent) => agent.id === 'codex')?.detected, false);
+  assert.equal(agents.find((agent) => agent.id === 'cursor')?.detected, true);
 });
 
 test('安装页和 Skill 目录页提供删除确认弹窗', () => {
@@ -116,13 +163,23 @@ test('Skill 卡片点击进入独立详情页', () => {
 });
 
 test('安装管理卡片点击进入已落地 Skill 详情页', () => {
-  assert.match(MANAGER_PAGE, /class="card clickable" data-installed-skill=/);
+  assert.match(MANAGER_PAGE, /class="card \$\{skill\.isBroken\?'':'clickable'\}"/);
+  assert.match(MANAGER_PAGE, /data-installed-skill=/);
   assert.match(MANAGER_PAGE, /location\.href='\/skill\?from=installed/);
   assert.match(MANAGER_PAGE, /closest\('button\[data-id\]'\)/);
   assert.match(
     MANAGER_PAGE,
     /grid\.addEventListener\('keydown',\(event\)=>\{\n\s{2}const card=event\.target\.closest\('\[data-installed-skill\]'\);/,
   );
+});
+
+test('安装管理列表展示软链损坏的 skill，并提供删除', () => {
+  assert.match(MANAGER_PAGE, /skill\.isBroken/);
+  assert.match(MANAGER_PAGE, /软链损坏/);
+  assert.match(MANAGER_PAGE, /data-delete-skill=/);
+  assert.match(MANAGER_PAGE, /removeBrokenSkill\(/);
+  assert.match(MANAGER_PAGE, /method:'DELETE',body:JSON\.stringify\(\{workspace:currentWorkspace,target:skill\.target,relativeDir:skill\.relativeDir\}\)/);
+  assert.match(MANAGER_STYLES, /\.badge\.broken/);
 });
 
 test('安装态详情页读取落地 SKILL.md 并返回安装管理', () => {

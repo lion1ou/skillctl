@@ -184,7 +184,7 @@ pnpm lint
 
 发布到 npm 的包只包含 `bin/` 和编译后的 `dist/`，不会打包 catalog 源文件。
 
-版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后如需自行发布 `@lion1ou/skill-ctl@1.1.0`：
+版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后如需自行发布 `@lion1ou/skill-ctl@1.2.0`：
 
 ```bash
 pnpm test

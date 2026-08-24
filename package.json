@@ -1,6 +1,6 @@
 {
   "name": "@lion1ou/skill-ctl",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Configuration-driven Agent Skill catalog installer.",
   "license": "MIT",
   "author": "lion1ou",
@@ -71,6 +71,7 @@
     "dirname": "skill-ctl",
     "commands": "./dist/commands",
     "topicSeparator": " ",
+    "additionalVersionFlags": ["-v"],
     "hooks": {
       "init": "./dist/hooks/init/welcome"
     }

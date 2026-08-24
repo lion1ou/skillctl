@@ -184,7 +184,7 @@ pnpm lint
 
 The published npm package contains only `bin/` and compiled `dist/`. Catalog sources are never bundled.
 
-Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish `@lion1ou/skill-ctl@1.1.0` yourself after committing:
+Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish `@lion1ou/skill-ctl@1.2.0` yourself after committing:
 
 ```bash
 pnpm test

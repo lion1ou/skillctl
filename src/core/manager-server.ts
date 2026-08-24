@@ -6,8 +6,12 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   addManagedWorkspace,
+  initializeCliConfig,
   loadCliConfig,
+  peekCliConfig,
   removeManagedWorkspace,
+  resolveCliConfigPath,
+  resolveSkillCacheDir,
   setWorkspaceTargetPinned,
 } from './cli-config.js';
 import {
@@ -23,6 +27,7 @@ import {
 import { installCatalogSkills, spawnExternalSkillAdd } from './catalog-install.js';
 import {
   loadInstalledSkillDetail,
+  removeBrokenManagedSkill,
   removeManagedAgentSkills,
   scanInstalledWorkspace,
   setManagedSkillEnabled,
@@ -94,13 +99,54 @@ async function routeManagerRequest(
       sendText(response, 403, '无权访问本机 Skill');
       return;
     }
+    if (await routeConfigApi(request, response, url, options.env)) return;
     if (await routeWorkspaceApi(request, response, url, options)) return;
     if (await routeInstalledApi(request, response, url, options.env)) return;
     if (await routeCatalogApi(request, response, url, options.env)) return;
     sendText(response, 404, 'Not Found');
   } catch (error) {
+    if (response.headersSent) {
+      response.end();
+      return;
+    }
     sendText(response, 400, error instanceof Error ? error.message : '请求处理失败');
   }
+}
+
+/** 读取初始化状态，并允许管理页面完成首次配置或更新已有配置。 */
+async function routeConfigApi(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  if (request.method === 'GET' && url.pathname === '/api/status') {
+    const config = peekCliConfig(env);
+    sendJson(response, {
+      initialized: config !== null,
+      configPath: resolveCliConfigPath(env),
+      sourceDir: config?.sourceDir ?? '',
+      cacheDir: config?.cacheDir ?? resolveSkillCacheDir(),
+    });
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/init') {
+    const input = await readJson(request, 4096);
+    const config = initializeCliConfig({
+      sourceDir: readString(input.sourceDir, 'sourceDir'),
+      cacheDir: readString(input.cacheDir, 'cacheDir'),
+      env,
+      force: input.force === true,
+    });
+    sendJson(response, {
+      initialized: true,
+      configPath: resolveCliConfigPath(env),
+      sourceDir: config.sourceDir,
+      cacheDir: config.cacheDir,
+    });
+    return true;
+  }
+  return false;
 }
 
 /** 处理 Workspace 列表、系统目录选择器和 Agent 固定状态。 */
@@ -187,6 +233,20 @@ async function routeInstalledApi(
     }));
     return true;
   }
+  if (request.method === 'DELETE' && url.pathname === '/api/skills') {
+    const input = await readJson(request, 4096);
+    if (typeof input.target !== 'string' || typeof input.relativeDir !== 'string') {
+      throw new Error('target 和 relativeDir 必须是字符串');
+    }
+    getTarget(input.target);
+    const workspace = readManagedWorkspace(input.workspace, env);
+    sendJson(response, removeBrokenManagedSkill({
+      workspaceRoot: workspace,
+      target: input.target as TargetId,
+      relativeDir: input.relativeDir,
+    }));
+    return true;
+  }
   if (request.method === 'DELETE' && url.pathname === '/api/skills/agent') {
     const input = await readJson(request, 4096);
     const workspace = readManagedWorkspace(input.workspace, env);
@@ -208,22 +268,42 @@ async function routeInstalledApi(
     const skillIds = asStringArray(input.skillIds);
     const workspace = readManagedWorkspace(input.workspace, env);
     const { sourceDir, cacheDir } = loadCliConfig(env);
-    const result = await installCatalogSkills({
-      sourceDir,
-      cacheDir,
-      scopeRoot: workspace,
-      targets: [input.target as TargetId],
-      selection: { categoryIds, skillIds },
-      mode,
-      force: input.force === true,
-      runExternalPrepare: async (prepare) => {
-        await spawnExternalSkillAdd(prepare.packageId, prepare.skillNames, prepare.cachePackageDir);
-      },
-    });
-    sendJson(response, {
-      ...scanInstalledWorkspace(workspace),
-      install: result,
-    });
+    const emit = beginNdjson(response);
+    try {
+      const result = await installCatalogSkills({
+        sourceDir,
+        cacheDir,
+        scopeRoot: workspace,
+        targets: [input.target as TargetId],
+        selection: { categoryIds, skillIds },
+        mode,
+        force: input.force === true,
+        onLog: (line) => emit({ type: 'log', line }),
+        runExternalPrepare: async (prepare) => {
+          emit({
+            type: 'log',
+            line: `准备外部包 ${prepare.index}/${prepare.total}：${prepare.packageId}（${prepare.skillNames.join(', ')}）`,
+          });
+          await spawnExternalSkillAdd(
+            prepare.packageId,
+            prepare.skillNames,
+            prepare.cachePackageDir,
+            (line) => emit({ type: 'log', line }),
+          );
+        },
+      });
+      emit({
+        type: 'result',
+        ...scanInstalledWorkspace(workspace),
+        install: result,
+      });
+    } catch (error) {
+      emit({
+        type: 'error',
+        message: error instanceof Error ? error.message : '安装失败',
+      });
+    }
+    response.end();
     return true;
   }
   return false;
@@ -358,6 +438,18 @@ function optionalBoolean(value: unknown): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new Error('字段必须是布尔值');
   return value;
+}
+
+/** 开始按行输出 NDJSON，供安装过程实时推送日志。 */
+function beginNdjson(response: ServerResponse): (event: unknown) => void {
+  response.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-accel-buffering': 'no',
+  });
+  return (event) => {
+    response.write(`${JSON.stringify(event)}\n`);
+  };
 }
 
 /** 返回 JSON，并禁止浏览器缓存本机实时状态。 */

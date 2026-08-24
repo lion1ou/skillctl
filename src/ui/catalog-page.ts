@@ -1,4 +1,9 @@
-import { MANAGER_STYLES, renderManagerNav } from './manager-chrome.js';
+import {
+  INITIALIZATION_SCRIPT,
+  MANAGER_STYLES,
+  renderInitializationDialog,
+  renderManagerNav,
+} from './manager-chrome.js';
 
 /** 将 SKILL.md 的 YAML frontmatter 与 Markdown 正文分开。 */
 export function splitSkillDocument(content: string): { frontmatter: string; body: string } {
@@ -188,6 +193,7 @@ export const CATALOG_PAGE = `<!doctype html>
     </form>
   </dialog>
 </main>
+${renderInitializationDialog()}
 <script>
 const token=__SKILLCTL_TOKEN__;
 let workspace={sourceDir:'',catalog:{skills:[],categories:[]},unregistered:[],uncategorized:[]};
@@ -274,6 +280,8 @@ async function request(url,options={}){
   if(!response.ok)throw new Error(await response.text());
   return response.json();
 }
+${INITIALIZATION_SCRIPT}
+
 async function loadWorkspace(showError=true){
   try{
     workspace=await request('/api/catalog');
@@ -389,7 +397,11 @@ grid.addEventListener('change',async(event)=>{
   await mutate('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:select.dataset.move,categoryId:select.value})},'已更新分类');
 });
 [search,enabledFilter,typeFilter].forEach((element)=>element.addEventListener('input',render));
-loadWorkspace();
+async function startPage(){
+  const configStatus=await setupInitialization(()=>loadWorkspace());
+  if(configStatus.initialized)await loadWorkspace();
+}
+void startPage();
 </script>
 </body>
 </html>`;

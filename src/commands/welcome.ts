@@ -10,7 +10,7 @@ export default class Welcome extends Command {
   static override description = '显示 banner 与交互式命令菜单';
 
   override async run(): Promise<void> {
-    this.log(renderBanner());
+    this.log(renderBanner(this.config.version));
 
     if (!process.stdin.isTTY) {
       this.log(style.dim('非 TTY 环境，跳过交互菜单。使用 --help 查看完整命令列表。'));

@@ -7,6 +7,8 @@ export const MANAGER_STYLES = `
     .nav-links{display:flex;align-items:center;gap:22px;height:48px}.nav-links a{position:relative;color:var(--muted);text-decoration:none;font-weight:500;transition:color .2s ease}
     .nav-links a::after{content:"";position:absolute;right:0;bottom:-14px;left:0;height:2px;background:#111;opacity:0;transform:scaleX(.65);transition:opacity .2s ease,transform .2s ease}
     .nav-links a:hover,.nav-links a.active{color:#111}.nav-links a.active::after{opacity:1;transform:scaleX(1)}
+    .nav-links .config-entry{height:30px;padding:0 12px;border-radius:6px;border:1px solid #DEDEDB;background:#FFFFFF;color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+    .nav-links .config-entry:hover{background:#F1F1EF}
     .page-header{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:20px}
     .page-title{font:500 28px/1.1 "Newsreader","Instrument Serif","Times New Roman",serif;letter-spacing:-.03em;margin:22px 0 5px}.subtitle{color:var(--muted);margin:0;max-width:680px;text-wrap:pretty}
     .summary{color:var(--muted)}.summary strong{color:var(--text)}
@@ -28,7 +30,7 @@ export const MANAGER_STYLES = `
     .card>button{margin-top:auto}
     .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:2.7em}.name{font-size:14px;font-weight:600;overflow-wrap:anywhere;line-height:1.35}
     .badges{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}.badge{padding:2px 7px;border-radius:9999px;background:#F1F1EF;color:#666662;font-size:10px;line-height:1.5;letter-spacing:.04em;text-transform:uppercase}
-    .badge.on{background:#EDF3EC;color:var(--green)}.badge.off{background:#FDEBEC;color:var(--red)}
+    .badge.on{background:#EDF3EC;color:var(--green)}.badge.off{background:#FDEBEC;color:var(--red)}.badge.broken{background:#FDEBEC;color:var(--red)}
     .badge.local,.badge.symlink,.badge.category{background:#FBF3DB;color:#956400}.badge.external,.badge.copy,.badge.uncategorized{background:#F1F1EF;color:#666662}
     .badge.cursor,.badge.claude,.badge.kiro,.badge.agents,.badge.codex,.badge.openclaw,.badge.hermes,.badge.gemini,.badge.copilot,.badge.windsurf,.badge.roo,.badge.opencode,.badge.openhands,.badge.droid,.badge.continue,.badge.trae,.badge.trae-cn,.badge.workbuddy,.badge.qoder,.badge.qoder-cn,.badge.codebuddy,.badge.qwen{background:#E1F3FE;color:#1F6C9F}
     .description{color:#555A5D;margin:0 0 8px;font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
@@ -67,7 +69,14 @@ export const MANAGER_STYLES = `
     .detail-header{align-items:flex-start}.back-link{display:inline-block;margin-top:18px;color:var(--muted);text-decoration:none}.back-link:hover{color:var(--text)}
     .skill-detail-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;min-height:0;overflow:auto}.detail-meta{align-self:start}.detail-meta h2{margin:0 0 10px}.detail-meta h2:not(:first-child){margin-top:20px}.detail-meta dl{grid-template-columns:48px minmax(0,1fr);font-size:12px}.detail-source-path{white-space:normal;overflow-wrap:anywhere}.detail-document{min-width:0;overflow:auto}.detail-document section+section{margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}.detail-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.detail-section-heading h2{margin:0;font-size:14px}
     .yaml-source,.markdown-body pre{margin:0;padding:14px;border:1px solid var(--line);border-radius:6px;background:#F7F6F3;overflow:auto;font:12px/1.65 "Geist Mono","SF Mono","JetBrains Mono",monospace}.yaml-source{color:#555A5D;white-space:pre}.markdown-body{color:#3F4447;font-size:14px;line-height:1.75}.markdown-body>:first-child{margin-top:0}.markdown-body>:last-child{margin-bottom:0}.markdown-body h1,.markdown-body h2,.markdown-body h3,.markdown-body h4{color:var(--text);line-height:1.3;margin:1.6em 0 .55em}.markdown-body h1{font-size:24px}.markdown-body h2{font-size:19px;border-bottom:1px solid var(--line);padding-bottom:6px}.markdown-body h3{font-size:16px}.markdown-body p{margin:.8em 0}.markdown-body ul,.markdown-body ol{padding-left:24px}.markdown-body blockquote{margin:1em 0;padding:3px 14px;border-left:3px solid #D8D8D4;color:var(--muted)}.markdown-body code{padding:2px 5px;border-radius:4px;background:#F1F1EF;font:12px/1.5 "Geist Mono","SF Mono","JetBrains Mono",monospace}.markdown-body pre code{padding:0;background:transparent}.markdown-body a{color:var(--blue);text-decoration-thickness:1px;text-underline-offset:2px}
-    dialog{width:min(520px,calc(100% - 32px));border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;color:var(--text);padding:0;box-shadow:0 20px 60px rgba(47,52,55,.04)}dialog::backdrop{background:rgba(47,52,55,.24)}dialog form{padding:24px}dialog h2{margin:0 0 6px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.confirm-detail{padding:10px 12px;border-radius:6px;background:#F7F6F3;color:#555A5D;font:12px/1.6 "Geist Mono","SF Mono",monospace;overflow-wrap:anywhere}.compact{padding:24px 12px}
+    dialog{width:min(520px,calc(100% - 32px));border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;color:var(--text);padding:0;box-shadow:0 20px 60px rgba(47,52,55,.04)}dialog::backdrop{background:rgba(47,52,55,.24)}dialog form{padding:24px}dialog h2{margin:0 0 6px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+    dialog.install-dialog{width:min(720px,calc(100% - 32px))}
+    .install-log{display:none;margin:12px 0 0;max-height:240px;overflow:auto;padding:12px 14px;border-radius:6px;background:#1B1F23;color:#E6EDF3;font:11px/1.55 "Geist Mono","SF Mono","JetBrains Mono",monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+    .install-log.show{display:block}.confirm-detail{padding:10px 12px;border-radius:6px;background:#F7F6F3;color:#555A5D;font:12px/1.6 "Geist Mono","SF Mono",monospace;overflow-wrap:anywhere}.compact{padding:24px 12px}
+    .init-form{padding:24px}.init-form h2{margin:0 0 6px}.init-form>.subtitle{margin-bottom:18px}
+    .init-form label{display:grid;gap:6px;margin:12px 0;color:#555A5D}.init-form label span{font-size:12px;color:var(--muted)}
+    .init-form .config-path{margin-top:14px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+    .init-form .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.init-form .actions button{flex:0 0 auto}
     .sync{margin-bottom:14px}.sync label{display:flex;gap:8px;align-items:center;margin:6px 0;color:#555A5D}
     form .row{display:grid;gap:8px;margin-bottom:10px}
     @media(max-width:860px){
@@ -84,5 +93,85 @@ export const MANAGER_STYLES = `
 export function renderManagerNav(active: 'installed' | 'catalog'): string {
   const installed = active === 'installed' ? ' active' : '';
   const catalog = active === 'catalog' ? ' active' : '';
-  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl</a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 目录</a></div></nav>`;
+  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl</a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 目录</a><button type="button" class="config-entry" id="initConfigButton">路径配置</button></div></nav>`;
 }
+
+/** 两个管理页面共用的初始化配置弹窗。 */
+export function renderInitializationDialog(): string {
+  return `<dialog id="initializationDialog">
+    <form class="init-form" id="initializationForm">
+      <h2>初始化 skillctl</h2>
+      <p class="subtitle">关联 Skill 源目录和缓存目录。源目录缺少配置表时会自动创建。</p>
+      <label><span>Skill 源目录（绝对路径）</span><input name="sourceDir" placeholder="/Users/name/skill-catalog" required></label>
+      <label><span>缓存目录（绝对路径）</span><input name="cacheDir" placeholder="/Users/name/.cache/skillctl" required></label>
+      <div class="notice" id="initializationNotice"></div>
+      <p class="config-path" id="configPath"></p>
+      <div class="actions">
+        <button type="button" class="ghost" id="cancelInitialization">取消</button>
+        <button type="submit" id="saveInitialization">保存配置</button>
+      </div>
+    </form>
+  </dialog>`;
+}
+
+/** 页面需先声明 request/showNotice，再调用 setupInitialization。 */
+export const INITIALIZATION_SCRIPT = `
+async function setupInitialization(onInitialized){
+  const dialog=document.querySelector('#initializationDialog');
+  const form=document.querySelector('#initializationForm');
+  const entry=document.querySelector('#initConfigButton');
+  const cancel=document.querySelector('#cancelInitialization');
+  const save=document.querySelector('#saveInitialization');
+  const configPath=document.querySelector('#configPath');
+  const initializationNotice=document.querySelector('#initializationNotice');
+  let status={initialized:false,sourceDir:'',cacheDir:'',configPath:''};
+
+  function applyStatus(next){
+    status=next;
+    form.elements.sourceDir.value=next.sourceDir||'';
+    form.elements.cacheDir.value=next.cacheDir||'';
+    configPath.textContent='配置文件：'+(next.configPath||'');
+    cancel.hidden=!next.initialized;
+  }
+  function openDialog(){
+    if(!dialog.open)dialog.showModal();
+    form.elements.sourceDir.focus();
+  }
+  function showInitializationError(error){
+    initializationNotice.textContent=error instanceof Error?error.message:'初始化失败';
+    initializationNotice.classList.add('show');
+  }
+
+  entry.addEventListener('click',openDialog);
+  cancel.addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('cancel',(event)=>{
+    if(!status.initialized)event.preventDefault();
+  });
+  form.addEventListener('submit',async(event)=>{
+    event.preventDefault();
+    if(status.initialized&&!confirm('保存会覆盖当前初始化配置。继续吗？'))return;
+    save.disabled=true;
+    initializationNotice.classList.remove('show');
+    try{
+      const data=Object.fromEntries(new FormData(form).entries());
+      applyStatus(await request('/api/init',{method:'POST',body:JSON.stringify({...data,force:status.initialized})}));
+      dialog.close();
+      showNotice('初始化配置已保存',true);
+      await onInitialized();
+    }catch(error){
+      showInitializationError(error);
+    }finally{
+      save.disabled=false;
+    }
+  });
+
+  try{
+    applyStatus(await request('/api/status'));
+    if(!status.initialized)openDialog();
+  }catch(error){
+    showInitializationError(error);
+    openDialog();
+  }
+  return status;
+}
+`;

@@ -3,9 +3,32 @@ import { existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CATEGORIES_FILE, MANIFEST_FILE, SKILLS_FILE } from '../src/core/brand.js';
-import { installCatalogSkills, resolveCatalogSkills } from '../src/core/catalog-install.js';
+import { installCatalogSkills, resolveCatalogSkills, splitCliLogLines, summarizeExternalPrepareOutput } from '../src/core/catalog-install.js';
 import { loadSkillCatalog } from '../src/core/skill-registry.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
+
+test('外部包准备失败时提炼可读错误，而不是 spinner 输出', () => {
+  const raw = [
+    '\u001B[38;5;250m███████╗\u001B[0m',
+    '◇  Source: https://github.com/jimliu/baoyu-skills.git',
+    '◐  Cloning repository…',
+    '■  Failed to clone repository',
+    "│  Failed to clone https://github.com/jimliu/baoyu-skills.git: Cloning into '/tmp/x'...",
+    "│  fatal: unable to access 'https://github.com/jimliu/baoyu-skills.git/': Failed to connect to github.com port 443",
+    '│  Tip: use the --yes (-y) and --global (-g) flags to install without prompts.',
+    '└  Installation failed',
+  ].join('\n');
+  const summary = summarizeExternalPrepareOutput(raw, 1);
+  assert.match(summary, /Failed to clone/);
+  assert.match(summary, /github\.com port 443/);
+  assert.doesNotMatch(summary, /Cloning repository/);
+  assert.doesNotMatch(summary, /\u001B/);
+});
+
+test('CLI 日志会去掉 ANSI 和控制字符，并保留可读行', () => {
+  const lines = splitCliLogLines('\u001B[33mCloning repository…\u001B[0m\rfatal: unable to access github.com\n█\n');
+  assert.deepEqual(lines, ['Cloning repository…', 'fatal: unable to access github.com']);
+});
 
 test('按分类展开 skill，并拒绝未知分类', () => {
   const repo = createTmpRepo('skillctl-catalog-resolve-');

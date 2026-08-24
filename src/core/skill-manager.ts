@@ -3,6 +3,7 @@ import {
   lstatSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -26,6 +27,7 @@ export interface ManagedSkill {
   installedPath: string;
   isEnabled: boolean;
   isSymlink: boolean;
+  isBroken: boolean;
   linkTarget?: string;
 }
 
@@ -67,12 +69,12 @@ export function scanInstalledWorkspace(workspaceRoot = homedir()): InstalledWork
       agentPath,
       skillsDir: target.skillsDir,
       skillsPath,
-      detected: existsSync(agentPath),
+      detected: existsSync(agentPath) || existsSync(skillsPath),
       skillCount: targetSkills.length,
       enabledCount: targetSkills.filter((skill) => skill.isEnabled).length,
     };
-  }).sort((left, right) =>
-    Number(right.detected) - Number(left.detected) || left.id.localeCompare(right.id));
+  }).filter((agent) => agent.detected)
+    .sort((left, right) => left.id.localeCompare(right.id));
   return { workspaceRoot, agents, skills };
 }
 
@@ -86,6 +88,7 @@ export function scanManagedSkills(workspaceRoot = homedir()): ManagedSkill[] {
   }
   return skills.sort((left, right) =>
     left.target.localeCompare(right.target) ||
+    Number(right.isBroken) - Number(left.isBroken) ||
     Number(right.isEnabled) - Number(left.isEnabled) ||
     left.name.localeCompare(right.name));
 }
@@ -115,6 +118,26 @@ export function setManagedSkillEnabled(input: {
   if (!existsSync(sourceFile)) throw new Error(`缺少待改名文件：${sourceFile}`);
   if (existsSync(destinationFile)) throw new Error(`启用和禁用文件同时存在：${skillDir}`);
   renameSync(sourceFile, destinationFile);
+  return scanInstalledWorkspace(workspaceRoot);
+}
+
+/** 删除软链损坏的 skill；只 unlink 链接本身，不触碰已丢失的源目录。 */
+export function removeBrokenManagedSkill(input: {
+  workspaceRoot?: string;
+  target: TargetId;
+  relativeDir: string;
+}): InstalledWorkspace {
+  const workspaceRoot = input.workspaceRoot ?? homedir();
+  const targetRoot = resolve(workspaceRoot, getTarget(input.target).skillsDir);
+  const skillDir = resolve(targetRoot, input.relativeDir);
+  if (skillDir !== targetRoot && !skillDir.startsWith(`${targetRoot}${sep}`)) {
+    throw new Error('skill 路径超出 target 根目录');
+  }
+  const skill = scanManagedSkills(workspaceRoot).find((item) =>
+    item.target === input.target && item.relativeDir === input.relativeDir);
+  if (!skill) throw new Error('未找到要管理的 skill');
+  if (!skill.isBroken || !skill.isSymlink) throw new Error('只能删除软链损坏的 skill');
+  unlinkSync(skill.installedPath);
   return scanInstalledWorkspace(workspaceRoot);
 }
 
@@ -158,6 +181,9 @@ export function loadInstalledSkillDetail(input: {
   const skill = scanManagedSkills(workspaceRoot).find((item) =>
     item.target === input.target && item.relativeDir === input.relativeDir);
   if (!skill) throw new Error('未找到要管理的 skill');
+  if (skill.isBroken) {
+    return { skill, available: false, sourcePath: skill.linkTarget ?? skill.installedPath };
+  }
 
   const marker = resolveSkillMarker(skill.installedPath);
   const sourcePath = join(skill.installedPath, marker?.file ?? ENABLED_FILE);
@@ -204,7 +230,12 @@ function scanTargetDirectory(
   const nextAncestors = new Set(ancestors).add(realDir);
   for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
     const childDir = join(currentDir, entry.name);
-    if (!entry.isDirectory() && !isDirectorySymlink(childDir)) continue;
+    const symlinkKind = classifyDirectorySymlink(childDir);
+    if (symlinkKind === 'broken') {
+      skills.push(buildBrokenManagedSkill(target, targetRoot, childDir));
+      continue;
+    }
+    if (!entry.isDirectory() && symlinkKind !== 'directory') continue;
     scanTargetDirectory(target, targetRoot, childDir, skills, nextAncestors, depth + 1);
   }
 }
@@ -228,7 +259,30 @@ function buildManagedSkill(
     installedPath: skillDir,
     isEnabled: marker.isEnabled,
     isSymlink,
+    isBroken: false,
     linkTarget: isSymlink ? realpathSync(skillDir) : undefined,
+  };
+}
+
+/** 断链 skill 没有可读的 SKILL.md，用目录名和链接目标展示。 */
+function buildBrokenManagedSkill(
+  target: TargetId,
+  targetRoot: string,
+  skillDir: string,
+): ManagedSkill {
+  const relativeDir = relative(targetRoot, skillDir);
+  const name = relativeDir.split(sep).at(-1) || relativeDir;
+  return {
+    id: `${target}:${relativeDir}`,
+    target,
+    name,
+    description: '软链目标不存在或不是目录',
+    relativeDir,
+    installedPath: skillDir,
+    isEnabled: false,
+    isSymlink: true,
+    isBroken: true,
+    linkTarget: resolve(dirname(skillDir), readlinkSync(skillDir)),
   };
 }
 
@@ -239,12 +293,19 @@ function resolveSkillMarker(skillDir: string): { file: string; isEnabled: boolea
   return null;
 }
 
-/** 判断有效目录软链，断链不进入递归扫描。 */
-function isDirectorySymlink(path: string): boolean {
-  if (!existsSync(path)) return false;
-  const pathState = lstatSync(path);
-  if (!pathState.isSymbolicLink()) return false;
-  const targetState = statSync(path);
-  return targetState.isDirectory();
+/** 区分有效目录软链和断链；普通路径返回 none。 */
+function classifyDirectorySymlink(path: string): 'directory' | 'broken' | 'none' {
+  let pathState: ReturnType<typeof lstatSync>;
+  try {
+    pathState = lstatSync(path);
+  } catch {
+    return 'none';
+  }
+  if (!pathState.isSymbolicLink()) return 'none';
+  try {
+    return statSync(path).isDirectory() ? 'directory' : 'broken';
+  } catch {
+    return 'broken';
+  }
 }
 

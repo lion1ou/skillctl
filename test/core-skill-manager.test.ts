@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, realpathSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, realpathSync, readlinkSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import * as skillManager from '../src/core/skill-manager.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
 
-const { scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
+const { removeBrokenManagedSkill, scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
 
 test('扫描各 target 的启用、禁用和软链 skill', () => {
   const repo = createTmpRepo('skillctl-manager-scan-');
@@ -51,6 +51,87 @@ test('扫描各 target 的启用、禁用和软链 skill', () => {
     assert.equal(agentsTarget?.skillsDir, '.agents/skills');
     assert.equal(agentsTarget?.skillCount, 1);
     assert.equal(agentsTarget?.enabledCount, 0);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Agent 列表只展示用户根目录中已出现的 Agent 目录', () => {
+  const repo = createTmpRepo('skillctl-manager-agents-');
+  try {
+    assert.deepEqual(scanInstalledWorkspace(repo.root).agents, []);
+
+    repo.mkdir('.claude');
+    repo.mkdir('.codex/skills');
+    const workspace = scanInstalledWorkspace(repo.root);
+
+    assert.deepEqual(workspace.agents.map((agent) => agent.id), ['claude', 'codex']);
+    assert.equal(workspace.agents.every((agent) => agent.detected), true);
+    assert.equal(workspace.agents.find((agent) => agent.id === 'claude')?.skillCount, 0);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('仅有 skills 目录时也会识别为已检测 Agent', () => {
+  const repo = createTmpRepo('skillctl-manager-skills-only-');
+  try {
+    repo.writeFile('.cursor/skills/demo/SKILL.md', '# demo');
+
+    const workspace = scanInstalledWorkspace(repo.root);
+    assert.deepEqual(workspace.agents.map((agent) => agent.id), ['cursor']);
+    assert.equal(workspace.agents[0]?.detected, true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('扫描会列出软链损坏的 skill，并允许只删除该链接', () => {
+  const repo = createTmpRepo('skillctl-manager-broken-link-');
+  try {
+    repo.writeFile('.cursor/skills/review/SKILL.md', [
+      '---',
+      'name: review',
+      'description: 审查代码',
+      '---',
+    ].join('\n'));
+    const missingSource = join(repo.root, 'missing-source');
+    const brokenPath = join(repo.root, '.cursor/skills/broken-skill');
+    symlinkSync(missingSource, brokenPath, 'dir');
+
+    const skills = scanManagedSkills(repo.root);
+    const broken = skills.find((skill) => skill.name === 'broken-skill');
+    const review = skills.find((skill) => skill.name === 'review');
+
+    assert.equal(review?.isBroken, false);
+    assert.equal(broken?.target, 'cursor');
+    assert.equal(broken?.relativeDir, 'broken-skill');
+    assert.equal(broken?.isSymlink, true);
+    assert.equal(broken?.isBroken, true);
+    assert.equal(broken?.isEnabled, false);
+    assert.equal(broken?.linkTarget, missingSource);
+    assert.equal(readlinkSync(brokenPath), missingSource);
+
+    const workspace = scanInstalledWorkspace(repo.root);
+    const cursor = workspace.agents.find((agent) => agent.id === 'cursor');
+    assert.equal(cursor?.skillCount, 2);
+    assert.equal(cursor?.enabledCount, 1);
+
+    const afterDelete = removeBrokenManagedSkill({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'broken-skill',
+    });
+    assert.equal(afterDelete.skills.some((skill) => skill.name === 'broken-skill'), false);
+    assert.equal(afterDelete.skills.some((skill) => skill.name === 'review'), true);
+    assert.throws(() => lstatSync(brokenPath), /ENOENT/);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills/review/SKILL.md')), true);
+
+    assert.throws(() => removeBrokenManagedSkill({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'review',
+    }), /只能删除软链损坏的 skill/);
   } finally {
     repo.cleanup();
   }

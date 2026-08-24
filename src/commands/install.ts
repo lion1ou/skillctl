@@ -99,6 +99,7 @@ export default class Install extends Command {
       },
       mode: selection.mode,
       force: flags.force,
+      onLog: (line) => this.log(line),
       runExternalPrepare,
     });
     for (const item of result.items) {
@@ -175,7 +176,7 @@ function resolveFlagSkills(
   }, '请通过 -G 或 -s 指定要安装的 skill');
 }
 
-/** 将一个外部包复制到缓存目录，下载期间展示 spinner 进度。 */
+/** 将一个外部包复制到缓存目录，并把 skills CLI 输出直接打到终端。 */
 async function runExternalPrepare(input: {
   packageId: string;
   skillNames: string[];
@@ -185,15 +186,16 @@ async function runExternalPrepare(input: {
 }): Promise<void> {
   const skillLabel = input.skillNames.join(', ');
   const progress = `${input.index}/${input.total}`;
-  const spin = p.spinner();
-  spin.start(`正在缓存外部 skill ${progress}：${input.packageId}（${skillLabel}）`);
-  try {
-    await spawnExternalSkillAdd(input.packageId, input.skillNames, input.cachePackageDir);
-    spin.stop(`已缓存 ${progress}：${input.packageId}`);
-  } catch (error) {
-    spin.stop(`缓存失败 ${progress}：${input.packageId}`);
-    throw error;
-  }
+  process.stdout.write(`正在缓存外部 skill ${progress}：${input.packageId}（${skillLabel}）\n`);
+  await spawnExternalSkillAdd(
+    input.packageId,
+    input.skillNames,
+    input.cachePackageDir,
+    (line) => {
+      process.stdout.write(`${line}\n`);
+    },
+  );
+  process.stdout.write(`已缓存 ${progress}：${input.packageId}\n`);
 }
 
 /** 只有未显式指定 skill 范围时才进入完整交互。 */

@@ -1,4 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import {
@@ -11,10 +12,16 @@ import {
 
 /** 从 src/dev-session.ts 解析仓库根目录，避免 dirname(../) 再退一层。 */
 export function resolveDevelopmentEntry(moduleUrl = import.meta.url): string {
-  const repoRoot = fileURLToPath(new URL('..', moduleUrl));
+  const repoRoot = resolveDevelopmentRoot(moduleUrl);
   return join(repoRoot, 'bin/dev.js');
 }
 
+/** 解析当前开发仓库根目录。 */
+export function resolveDevelopmentRoot(moduleUrl = import.meta.url): string {
+  return fileURLToPath(new URL('..', moduleUrl));
+}
+
+const developmentRoot = resolveDevelopmentRoot();
 const developmentEntry = resolveDevelopmentEntry();
 
 /** 启动开发会话：挂上全局 skill-ctl，结束后按原状态恢复。 */
@@ -23,9 +30,10 @@ export async function runDevSession(argv = process.argv.slice(2)): Promise<numbe
     binPath: findSkillctlOnPath(process.env.PATH ?? '') ?? npmGlobalSkillctlPath(readNpmPrefix()),
     developmentEntry,
   });
-  logLink(link);
+  logLink(link, developmentEntry);
   try {
     if (argv.length === 0) {
+      console.log(`开发仓库 ${developmentRoot} · v${readPackageVersion(developmentRoot)}`);
       console.log('按 Ctrl+C 结束开发并恢复全局 skill-ctl');
       await waitForSignal();
       return 0;
@@ -88,14 +96,25 @@ function waitForChild(child: ChildProcess): Promise<number> {
 }
 
 /** 说明本次是新建全局命令还是临时改写已有指向。 */
-function logLink(link: GlobalSkillctlLink): void {
+function logLink(link: GlobalSkillctlLink, target: string): void {
   if (!link.owned) {
-    console.log(`全局 skill-ctl 已指向开发仓库：${link.binPath}`);
+    console.log(`全局 skill-ctl 已指向本仓库开发入口：${formatDevLink(link.binPath, target)}`);
     return;
   }
   if (link.previous.kind === 'none') {
-    console.log(`未发现全局 skill-ctl，已注册：${link.binPath} -> ${developmentEntry}`);
+    console.log(`未发现全局 skill-ctl，已注册：${formatDevLink(link.binPath, target)}`);
     return;
   }
-  console.log(`全局 skill-ctl 已临时软链到开发仓库：${link.binPath}`);
+  console.log(`全局 skill-ctl 已临时指向开发入口：${formatDevLink(link.binPath, target)}`);
+}
+
+/** 把全局命令路径和开发入口拼成可读的一行映射。 */
+function formatDevLink(binPath: string, target: string): string {
+  return `${binPath} -> ${target}`;
+}
+
+/** 读取当前开发仓库 package.json 中的版本号。 */
+function readPackageVersion(repoRoot: string): string {
+  const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as { version?: string };
+  return pkg.version ?? '0.0.0';
 }
