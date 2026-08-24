@@ -22,7 +22,7 @@ test('外部包准备失败时提炼可读错误，而不是 spinner 输出', ()
   assert.match(summary, /Failed to clone/);
   assert.match(summary, /github\.com port 443/);
   assert.doesNotMatch(summary, /Cloning repository/);
-  assert.doesNotMatch(summary, /\u001B/);
+  assert.equal(summary.includes('\u001B'), false);
 });
 
 test('CLI 日志会去掉 ANSI 和控制字符，并保留可读行', () => {

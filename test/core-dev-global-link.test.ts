@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, symlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  readFileSync,
+  readlinkSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
   DEV_BACKUP_SUFFIX,
+  DEV_LOCK_SUFFIX,
   findSkillctlOnPath,
   linkGlobalSkillctl,
   npmGlobalSkillctlPath,
@@ -98,21 +108,71 @@ test('原先是普通文件时先备份再软链，恢复后还原文件并清�
   }
 });
 
-test('已指向开发仓库时不抢所有权，恢复为空操作', () => {
+test('会话仍在运行时不抢所有权，恢复为空操作', () => {
   const repo = createTmpRepo('skill-ctl-dev-owned-');
   try {
     repo.writeFile('repo/bin/dev.js', '#!/usr/bin/env node\n');
     const binPath = join(repo.root, 'prefix/bin/skill-ctl');
     const developmentEntry = join(repo.root, 'repo/bin/dev.js');
     const first = linkGlobalSkillctl({ binPath, developmentEntry });
-    const nested = linkGlobalSkillctl({ binPath, developmentEntry });
+    assert.equal(existsSync(`${binPath}${DEV_LOCK_SUFFIX}`), true);
 
+    const nested = linkGlobalSkillctl({ binPath, developmentEntry });
     assert.equal(nested.owned, false);
     restoreGlobalSkillctl(nested, developmentEntry);
     assert.equal(existsSync(binPath), true);
+    assert.equal(existsSync(`${binPath}${DEV_LOCK_SUFFIX}`), true);
 
     restoreGlobalSkillctl(first, developmentEntry);
     assert.equal(existsSync(binPath), false);
+    assert.equal(existsSync(`${binPath}${DEV_LOCK_SUFFIX}`), false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('软链残留但没有会话锁时接管，退出后删除', () => {
+  const repo = createTmpRepo('skill-ctl-dev-stale-');
+  try {
+    repo.writeFile('repo/bin/dev.js', '#!/usr/bin/env node\n');
+    const binPath = join(repo.root, 'prefix/bin/skill-ctl');
+    const developmentEntry = join(repo.root, 'repo/bin/dev.js');
+    repo.mkdir('prefix/bin');
+    symlinkSync(developmentEntry, binPath);
+
+    const link = linkGlobalSkillctl({ binPath, developmentEntry });
+
+    assert.equal(link.owned, true);
+    assert.equal(link.previous.kind, 'none');
+    assert.equal(readlinkSync(binPath), developmentEntry);
+
+    restoreGlobalSkillctl(link, developmentEntry);
+    assert.equal(existsSync(binPath), false);
+    assert.equal(existsSync(`${binPath}${DEV_LOCK_SUFFIX}`), false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('会话锁里的进程已退出时接管残留软链', () => {
+  const repo = createTmpRepo('skill-ctl-dev-dead-lock-');
+  try {
+    repo.writeFile('repo/bin/dev.js', '#!/usr/bin/env node\n');
+    const binPath = join(repo.root, 'prefix/bin/skill-ctl');
+    const developmentEntry = join(repo.root, 'repo/bin/dev.js');
+    repo.mkdir('prefix/bin');
+    symlinkSync(developmentEntry, binPath);
+    const exited = spawnSync(process.execPath, ['-e', '']);
+    assert.ok(exited.pid);
+    writeFileSync(`${binPath}${DEV_LOCK_SUFFIX}`, `${exited.pid}\n`, 'utf8');
+
+    const link = linkGlobalSkillctl({ binPath, developmentEntry });
+    assert.equal(link.owned, true);
+    assert.equal(readFileSync(`${binPath}${DEV_LOCK_SUFFIX}`, 'utf8').trim(), String(process.pid));
+
+    restoreGlobalSkillctl(link, developmentEntry);
+    assert.equal(existsSync(binPath), false);
+    assert.equal(existsSync(`${binPath}${DEV_LOCK_SUFFIX}`), false);
   } finally {
     repo.cleanup();
   }

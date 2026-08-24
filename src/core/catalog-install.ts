@@ -157,14 +157,15 @@ export function createCliLogWriter(onLog?: (line: string) => void): {
 
 function stripCliControl(text: string): string {
   return text
+    // eslint-disable-next-line no-control-regex -- 必须匹配 ANSI CSI 序列
     .replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '')
+    // eslint-disable-next-line no-control-regex -- 必须匹配 ANSI OSC 序列
     .replace(/\u001B\][^\u0007]*\u0007/g, '');
 }
 
 /** 从 skills CLI 输出中提取可读失败原因，去掉 spinner 与 ANSI 噪音。 */
 export function summarizeExternalPrepareOutput(output: string, status?: number | null): string {
-  const plain = output
-    .replace(/\u001B\[[0-9;?]*[ -/]*[@-~]/g, '')
+  const plain = stripCliControl(output)
     .replace(/\r/g, '\n')
     .split('\n')
     .map((line) => line.trim())
