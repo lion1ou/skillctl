@@ -44,7 +44,7 @@ export function inspectPackageSkills(packageId: string): PackageSkill[] {
   });
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
   if (result.status !== 0) {
-    throw new Error(`读取外部包失败：${normalizeLine(output).trim() || `exit ${result.status}`}`);
+    throw new Error(`读取外部包失败：\n${normalizeLine(output).trim() || `exit ${result.status}`}`);
   }
   const skills = listPackageSkills(output);
   if (skills.length === 0) throw new Error(`外部包未发现 skill：${packageId}`);
