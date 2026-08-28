@@ -174,7 +174,7 @@ test('管理服务可添加 Workspace、扫描其中 Skill 并固定 Agent', asy
       body: JSON.stringify({
         workspace,
         target: 'cursor',
-        categoryIds: ['common'],
+        skillIds: ['detail-skill'],
         mode: 'symlink',
       }),
     });
@@ -254,6 +254,52 @@ test('管理服务扫描并删除软链损坏的 skill', async () => {
     assert.equal(after.skills.some((skill) => skill.name === 'review'), true);
     assert.throws(() => lstatSync(join(workspace, '.cursor/skills/broken-skill')), /ENOENT/);
     assert.equal(existsSync(join(workspace, '.cursor/skills/review/SKILL.md')), true);
+  } finally {
+    await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
+    repo.cleanup();
+  }
+});
+
+test('管理服务可删除 Workspace 中健康的单个 Skill', async () => {
+  const repo = createTmpRepo('skillctl-manager-remove-healthy-skill-');
+  const env = {
+    HOME: repo.root,
+    XDG_CONFIG_HOME: join(repo.root, 'config'),
+  } as NodeJS.ProcessEnv;
+  const workspace = join(repo.root, 'project');
+  repo.writeFile('project/.cursor/skills/keep/SKILL.md', '---\nname: keep\n---\n# keep');
+  repo.writeFile('project/.cursor/skills/remove/SKILL.md', '---\nname: remove\n---\n# remove');
+  initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
+  repo.writeFile(`catalog/${SKILLS_FILE}`, JSON.stringify({ version: 1, skills: [] }));
+  repo.writeFile(`catalog/${CATEGORIES_FILE}`, JSON.stringify({ version: 1, categories: [] }));
+  const manager = await startManagerServer({ port: 0, env });
+  try {
+    const html = await (await fetch(manager.url)).text();
+    const token = html.match(/const token="([^"]+)"/)?.[1];
+    assert.ok(token);
+    const request = (path: string, options: RequestInit = {}) => fetch(`${manager.url}${path}`, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        'x-skillctl-token': token,
+        ...options.headers,
+      },
+    });
+    await request('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ path: workspace }),
+    });
+
+    const deleted = await request('/api/skills', {
+      method: 'DELETE',
+      body: JSON.stringify({ workspace, target: 'cursor', relativeDir: 'remove' }),
+    });
+
+    assert.equal(deleted.status, 200);
+    const after = await deleted.json() as { skills: { name: string }[] };
+    assert.deepEqual(after.skills.map((skill) => skill.name), ['keep']);
+    assert.equal(existsSync(join(workspace, '.cursor/skills/remove')), false);
+    assert.equal(existsSync(join(workspace, '.cursor/skills/keep/SKILL.md')), true);
   } finally {
     await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
     repo.cleanup();

@@ -65,6 +65,39 @@ export function visibleAgentsForWorkspace(input: {
   return [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
+/** 将可安装 Skill 归入唯一分类，并按搜索词过滤分组。 */
+export function groupInstallableSkills(input: {
+  skills: { id: string; name: string; description?: string }[];
+  categories: { id: string; name: string; skillIds: string[] }[];
+  keyword: string;
+}) {
+  const skillById = new Map(input.skills.map((skill) => [skill.id, skill]));
+  const assigned = new Set<string>();
+  const groups = input.categories.map((category) => {
+    const skills = category.skillIds.flatMap((id) => {
+      const skill = skillById.get(id);
+      if (!skill || assigned.has(id)) return [];
+      assigned.add(id);
+      return [skill];
+    });
+    return { id: category.id, name: category.name, skills };
+  });
+  const uncategorized = input.skills.filter((skill) => !assigned.has(skill.id));
+  if (uncategorized.length > 0) {
+    groups.push({ id: 'uncategorized', name: '未分类', skills: uncategorized });
+  }
+
+  const keyword = input.keyword.trim().toLowerCase();
+  return groups
+    .map((group) => ({
+      ...group,
+      skills: group.skills.filter((skill) =>
+        !keyword || [skill.id, skill.name, skill.description]
+          .some((value) => String(value ?? '').toLowerCase().includes(keyword))),
+    }))
+    .filter((group) => group.skills.length > 0);
+}
+
 export const MANAGER_PAGE = `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -134,9 +167,10 @@ export const MANAGER_PAGE = `<!doctype html>
   </dialog>
   <dialog id="installDialog" class="install-dialog">
     <form method="dialog">
-      <h2>按分类安装</h2>
+      <h2>安装 Skill</h2>
       <p class="subtitle" id="installHint"></p>
-      <div class="cats" id="categoryList"></div>
+      <div class="field"><span>搜索 Skill</span><input id="installSkillSearch" placeholder="搜索名称、ID 或描述"></div>
+      <div class="install-groups" id="categoryList"></div>
       <div class="field">
         <span>安装模式</span>
         <select id="installMode"><option value="symlink">软链</option><option value="copy">复制</option></select>
@@ -182,15 +216,19 @@ const agentDialog=document.querySelector('#agentDialog');
 const confirmDialog=document.querySelector('#confirmDialog');
 const installDialog=document.querySelector('#installDialog');
 const categoryList=document.querySelector('#categoryList');
+const installSkillSearch=document.querySelector('#installSkillSearch');
 const installHint=document.querySelector('#installHint');
 const installButton=document.querySelector('#installButton');
 const confirmInstallButton=document.querySelector('#confirmInstallButton');
 const closeInstallButton=document.querySelector('#closeInstallButton');
 const installLog=document.querySelector('#installLog');
 let confirmAction=null;
+let installSelection=new Set();
+let installExpandedCategories=new Set();
 const escapeHtml=(value)=>String(value).replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const abbreviateSkillPath=${abbreviateSkillPath.toString()};
 const visibleAgentsForWorkspace=${visibleAgentsForWorkspace.toString()};
+const groupInstallableSkills=${groupInstallableSkills.toString()};
 
 function showNotice(message,ok=false){
   notice.textContent=message;
@@ -216,10 +254,8 @@ function visibleAgents(){
     targets:manager.targets,
   });
 }
-function selectedCategoryIds(){
-  const boxes=[...document.querySelectorAll('#categoryList input')];
-  return boxes.filter((input)=>input.checked).map((input)=>input.value);
-}
+function installableCatalogSkills(){return (catalog.skills||[]).filter((skill)=>skill.enabled!==false)}
+function selectedSkillIds(){return [...installSelection]}
 
 function workspaceLabel(item,index){
   if(index===0) return '用户根目录';
@@ -248,19 +284,39 @@ function renderAgents(){
   }).join('');
 }
 
-function renderInstall(){
+function renderInstallSkillChoices(){
+  const keyword=installSkillSearch.value.trim().toLowerCase();
+  const skills=installableCatalogSkills();
+  const groups=groupInstallableSkills({skills,categories:catalog.categories||[],keyword});
+  const allGroups=new Map(groupInstallableSkills({skills,categories:catalog.categories||[],keyword:''}).map((group)=>[group.id,group]));
+  categoryList.innerHTML=groups.map((group)=>{
+    const allSkills=allGroups.get(group.id)?.skills||group.skills;
+    const selectedCount=allSkills.filter((skill)=>installSelection.has(skill.id)).length;
+    const checked=selectedCount===allSkills.length?' checked':'';
+    const open=Boolean(keyword)||installExpandedCategories.has(group.id);
+    const choices=group.skills.map((skill)=>{
+      const skillChecked=installSelection.has(skill.id)?' checked':'';
+      return '<label><input type="checkbox" name="installSkill" value="'+escapeHtml(skill.id)+'"'+skillChecked+'><span><strong>'+escapeHtml(skill.name)+'</strong><small>'+escapeHtml(skill.id)+' · '+escapeHtml(skill.description||'无描述')+'</small></span></label>';
+    }).join('');
+    return '<section class="install-group" data-install-group="'+escapeHtml(group.id)+'"><div class="install-group-head"><label class="install-category-check"><input type="checkbox" name="installCategory" value="'+escapeHtml(group.id)+'"'+checked+' aria-label="选择 '+escapeHtml(group.name)+' 全部 Skill"></label><button type="button" class="install-category-toggle" data-toggle-install-category="'+escapeHtml(group.id)+'" aria-expanded="'+open+'"><span>'+escapeHtml(group.name)+'</span><small>'+selectedCount+' / '+allSkills.length+'</small><span class="install-chevron" aria-hidden="true">›</span></button></div><div class="install-group-skills"'+(open?'':' hidden')+'>'+choices+'</div></section>';
+  }).join('')||'<div class="empty compact">没有匹配的可安装 Skill</div>';
+  for(const group of groups){
+    const allSkills=allGroups.get(group.id)?.skills||group.skills;
+    const selectedCount=allSkills.filter((skill)=>installSelection.has(skill.id)).length;
+    const input=categoryList.querySelector('input[name="installCategory"][value="'+CSS.escape(group.id)+'"]');
+    if(input)input.indeterminate=selectedCount>0&&selectedCount<allSkills.length;
+  }
+}
+function renderInstall(force=false){
   const agent=selectedAgent();
-  const cats=catalog.categories||[];
-  installButton.disabled=!agent||cats.length===0||isUpdating;
-  confirmInstallButton.disabled=!agent||cats.length===0||isUpdating;
+  const skills=installableCatalogSkills();
+  installButton.disabled=!agent||skills.length===0||isUpdating;
+  confirmInstallButton.disabled=!agent||skills.length===0||isUpdating;
+  if(installDialog.open&&!force)return;
   if(!agent){installHint.textContent='先选择左侧 Agent。';categoryList.innerHTML='';return}
-  if(cats.length===0){installHint.textContent='配置表不可用或没有分类，无法安装。';categoryList.innerHTML='';return}
-  installHint.textContent='安装到 '+currentWorkspace+' 下 '+agent.skillsDir+'。只安装所选分类里已启用的 skill。';
-  if(installDialog.open)return;
-  categoryList.innerHTML=cats.map((category)=>{
-    const count=category.skillIds.length;
-    return '<label><input type="checkbox" value="'+escapeHtml(category.id)+'"><span>'+escapeHtml(category.name)+' · '+count+'</span></label>';
-  }).join('');
+  if(skills.length===0){installHint.textContent='配置表不可用或没有已启用的 Skill，无法安装。';categoryList.innerHTML='';return}
+  installHint.textContent='安装到 '+currentWorkspace+' 下 '+agent.skillsDir+'。可按分类快速勾选，再单独增减 Skill。';
+  renderInstallSkillChoices();
 }
 
 function renderSkills(resetScroll=false){
@@ -282,9 +338,8 @@ function renderSkills(resetScroll=false){
     const installedPath=abbreviateSkillPath(skill.installedPath,currentWorkspace,homeRoot);
     const linkTarget=skill.linkTarget?abbreviateSkillPath(skill.linkTarget,currentWorkspace,homeRoot):'';
     const statusBadge=skill.isBroken?'<span class="badge broken">软链损坏</span>':'<span class="badge '+(skill.isEnabled?'on':'off')+'">'+(skill.isEnabled?'已启用':'未启用')+'</span>';
-    const action=skill.isBroken
-      ?'<button class="danger" data-delete-skill="'+escapeHtml(skill.id)+'">删除</button>'
-      :'<button class="'+(skill.isEnabled?'disable':'')+'" data-id="'+escapeHtml(skill.id)+'">'+(skill.isEnabled?'禁用':'启用')+'</button>';
+    const toggle=skill.isBroken?'':'<button class="'+(skill.isEnabled?'disable':'')+'" data-id="'+escapeHtml(skill.id)+'">'+(skill.isEnabled?'禁用':'启用')+'</button>';
+    const action='<div class="actions">'+toggle+'<button class="danger" data-delete-skill="'+escapeHtml(skill.id)+'">删除</button></div>';
     return \`
     <article class="card \${skill.isBroken?'':'clickable'}" \${skill.isBroken?'':'data-installed-skill="'+escapeHtml(skill.id)+'" tabindex="0"'}>
       <div class="card-head"><div class="name">\${escapeHtml(skill.name)}</div>\${statusBadge}</div>
@@ -410,12 +465,17 @@ grid.addEventListener('click',async(event)=>{
   const remove=event.target.closest('button[data-delete-skill]');
   if(remove){
     const skill=workspace.skills.find((item)=>item.id===remove.dataset.deleteSkill);
-    if(!skill||!skill.isBroken||isUpdating)return;
+    if(!skill||isUpdating)return;
+    const removalMessage=skill.isBroken
+      ?'将删除这条损坏的 Skill 软链。已丢失的源目录不会被改动。'
+      :skill.isSymlink
+        ?'将从当前 Workspace 删除这条 Skill 软链，源目录会保留。'
+        :'将删除当前 Workspace 中这份 Skill 副本，不影响配置表来源。';
     askConfirmation({
-      title:'删除损坏的软链',
-      message:'将删除这条 Skill 软链。已丢失的源目录不会被改动。',
-      detail:(skill.installedPath||'')+(skill.linkTarget?' → '+skill.linkTarget:''),
-      action:()=>removeBrokenSkill(skill),
+      title:'删除 '+skill.name,
+      message:removalMessage,
+      detail:'Workspace：'+currentWorkspace+'\\nAgent：'+skill.target+'\\n路径：'+(skill.installedPath||'')+(skill.linkTarget?' → '+skill.linkTarget:''),
+      action:()=>removeSkill(skill),
     });
     return;
   }
@@ -452,24 +512,59 @@ grid.addEventListener('keydown',(event)=>{
 installButton.addEventListener('click',()=>{
   installLog.textContent='';
   installLog.classList.remove('show');
-  closeInstallButton.textContent='取消';
-  renderInstall();
+  installSelection=new Set();
+  installExpandedCategories=new Set();
+  installSkillSearch.value='';
+  renderInstall(true);
   installDialog.showModal();
 });
 installDialog.addEventListener('cancel',(event)=>{
   if(isUpdating)event.preventDefault();
 });
+categoryList.addEventListener('change',(event)=>{
+  const categoryInput=event.target.closest('input[name="installCategory"]');
+  if(categoryInput){
+    const group=groupInstallableSkills({
+      skills:installableCatalogSkills(),
+      categories:catalog.categories||[],
+      keyword:'',
+    }).find((item)=>item.id===categoryInput.value);
+    for(const skill of group?.skills||[]){
+      if(categoryInput.checked)installSelection.add(skill.id);
+      else installSelection.delete(skill.id);
+    }
+    renderInstall(true);
+    return;
+  }
+  const input=event.target.closest('input[name="installSkill"]');
+  if(!input)return;
+  if(input.checked)installSelection.add(input.value);
+  else installSelection.delete(input.value);
+  renderInstall(true);
+});
+categoryList.addEventListener('click',(event)=>{
+  const button=event.target.closest('[data-toggle-install-category]');
+  if(!button)return;
+  const categoryId=button.dataset.toggleInstallCategory;
+  if(installExpandedCategories.has(categoryId))installExpandedCategories.delete(categoryId);
+  else installExpandedCategories.add(categoryId);
+  renderInstall(true);
+});
+installSkillSearch.addEventListener('input',()=>renderInstall(true));
+installSkillSearch.addEventListener('keydown',(event)=>{
+  if(event.key==='Enter')event.preventDefault();
+});
 
 confirmInstallButton.addEventListener('click',async()=>{
   const agent=selectedAgent();
-  const categoryIds=selectedCategoryIds();
+  const skillIds=selectedSkillIds();
   if(!agent||isUpdating)return;
-  if(categoryIds.length===0){showNotice('请至少选择一个分类');return}
+  if(skillIds.length===0){showNotice('请至少选择一个 Skill');return}
   isUpdating=true;confirmInstallButton.disabled=true;closeInstallButton.disabled=true;
   installLog.textContent='';
   appendInstallLog('开始安装到 '+agent.id+' …');
   try{
-    const data=await streamInstall({workspace:currentWorkspace,target:agent.id,categoryIds,mode:document.querySelector('#installMode').value,force:document.querySelector('#installForce').checked});
+    const data=await streamInstall({workspace:currentWorkspace,target:agent.id,skillIds,mode:document.querySelector('#installMode').value,force:document.querySelector('#installForce').checked});
     applyWorkspace(data);
     const skipped=data.install?.skippedDisabled||[];
     const items=data.install?.items||[];
@@ -477,8 +572,7 @@ confirmInstallButton.addEventListener('click',async()=>{
     const skippedItems=items.filter((item)=>item.status==='skipped').length;
     appendInstallLog('完成：已处理 '+created+' 个，跳过 '+skippedItems+' 个');
     showNotice('已处理 '+created+' 个，跳过 '+skippedItems+' 个'+(skipped.length?'；配置表未启用：'+skipped.join(', '):''),true);
-    closeInstallButton.textContent='关闭';
-    render(false);
+    installDialog.close();
   }catch(error){
     const message=error instanceof Error?error.message:'安装失败';
     appendInstallLog('失败：'+message);
@@ -578,15 +672,15 @@ async function removeAgent(target){
   }finally{isUpdating=false;render(true)}
 }
 
-async function removeBrokenSkill(skill){
-  if(!currentWorkspace||!skill?.isBroken||isUpdating)return;
+async function removeSkill(skill){
+  if(!currentWorkspace||!skill||isUpdating)return;
   isUpdating=true;
   try{
     applyWorkspace(await request('/api/skills',{method:'DELETE',body:JSON.stringify({workspace:currentWorkspace,target:skill.target,relativeDir:skill.relativeDir})}));
     clearNotice();
     render(false);
   }catch(error){
-    showNotice(error instanceof Error?error.message:'删除损坏软链失败');
+    showNotice(error instanceof Error?error.message:'Skill 删除失败');
   }finally{isUpdating=false;render(false)}
 }
 

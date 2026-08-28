@@ -13,6 +13,8 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { normalizeSkillDescription, parseFrontmatter } from './frontmatter.js';
+import { MANIFEST_FILE } from './brand.js';
+import { readInstallRecord, writeInstallRecord } from './install-record.js';
 import { TARGETS, getTarget, type TargetId } from './targets.js';
 
 const ENABLED_FILE = 'SKILL.md';
@@ -121,23 +123,35 @@ export function setManagedSkillEnabled(input: {
   return scanInstalledWorkspace(workspaceRoot);
 }
 
-/** 删除软链损坏的 skill；只 unlink 链接本身，不触碰已丢失的源目录。 */
-export function removeBrokenManagedSkill(input: {
+/** 删除 Workspace 中单个 Skill；软链只移除链接，复制安装移除目标副本。 */
+export function removeManagedSkill(input: {
   workspaceRoot?: string;
   target: TargetId;
   relativeDir: string;
 }): InstalledWorkspace {
-  const workspaceRoot = input.workspaceRoot ?? homedir();
+  const workspaceRoot = resolve(input.workspaceRoot ?? homedir());
   const targetRoot = resolve(workspaceRoot, getTarget(input.target).skillsDir);
   const skillDir = resolve(targetRoot, input.relativeDir);
-  if (skillDir !== targetRoot && !skillDir.startsWith(`${targetRoot}${sep}`)) {
+  if (skillDir === targetRoot || !skillDir.startsWith(`${targetRoot}${sep}`)) {
     throw new Error('skill 路径超出 target 根目录');
   }
   const skill = scanManagedSkills(workspaceRoot).find((item) =>
     item.target === input.target && item.relativeDir === input.relativeDir);
   if (!skill) throw new Error('未找到要管理的 skill');
-  if (!skill.isBroken || !skill.isSymlink) throw new Error('只能删除软链损坏的 skill');
-  unlinkSync(skill.installedPath);
+  if (lstatSync(targetRoot).isSymbolicLink()) {
+    throw new Error('Agent skills 根目录为软链，不能单独删除其中的 Skill');
+  }
+
+  const recordFile = join(targetRoot, MANIFEST_FILE);
+  const hasRecord = existsSync(recordFile);
+  const record = readInstallRecord(recordFile);
+  if (skill.isSymlink) unlinkSync(skill.installedPath);
+  else rmSync(skill.installedPath, { recursive: true });
+
+  if (hasRecord) {
+    delete record.skills[input.relativeDir];
+    writeInstallRecord(recordFile, record);
+  }
   return scanInstalledWorkspace(workspaceRoot);
 }
 

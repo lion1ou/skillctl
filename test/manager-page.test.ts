@@ -7,7 +7,7 @@ import * as managerPage from '../src/ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../src/ui/skill-detail-page.js';
 
 const { CATALOG_PAGE } = catalogPage;
-const { MANAGER_PAGE, visibleAgentsForWorkspace } = managerPage;
+const { groupInstallableSkills, MANAGER_PAGE, visibleAgentsForWorkspace } = managerPage;
 
 function inlineScripts(page: string): string[] {
   return [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
@@ -36,6 +36,11 @@ test('安装管理页把新增与安装操作放在各自上下文中', () => {
   assert.match(MANAGER_PAGE, /<dialog id="installDialog"/);
   assert.match(MANAGER_PAGE, /id="installLog"/);
   assert.match(MANAGER_PAGE, /streamInstall\(/);
+  assert.match(MANAGER_PAGE, /id="installSkillSearch"/);
+  assert.match(MANAGER_PAGE, /class="install-groups" id="categoryList"/);
+  assert.match(MANAGER_PAGE, /name="installSkill"/);
+  assert.match(MANAGER_PAGE, /data-toggle-install-category=/);
+  assert.match(MANAGER_PAGE, /skillIds/);
   assert.doesNotMatch(MANAGER_PAGE, /id="installPanel"/);
 });
 
@@ -66,6 +71,7 @@ test('管理页使用全高弹性布局与暖白极简视觉', () => {
 test('窄屏卡片和操作栏允许内容收缩，避免横向溢出', () => {
   assert.match(MANAGER_STYLES, /\.card\{[^}]*min-width:0/);
   assert.match(MANAGER_STYLES, /\.actions>\*\{[^}]*min-width:0/);
+  assert.match(MANAGER_STYLES, /\.card>\.actions\{margin-top:auto\}/);
 });
 
 test('安装管理页精简标题、按钮与搜索文案', () => {
@@ -183,11 +189,65 @@ test('安装管理卡片点击进入已落地 Skill 详情页', () => {
   );
 });
 
-test('安装管理列表展示软链损坏的 skill，并提供删除', () => {
+test('安装成功后自动关闭弹窗，失败时保留日志', () => {
+  assert.match(MANAGER_PAGE, /,true\);\n\s{4}installDialog\.close\(\);/);
+  assert.doesNotMatch(MANAGER_PAGE, /closeInstallButton\.textContent='关闭'/);
+  assert.match(MANAGER_PAGE, /appendInstallLog\('失败：'\+message\)/);
+});
+
+test('分类标题按钮覆盖全局按钮的白色文字，保证浅底可读', () => {
+  assert.match(MANAGER_STYLES, /\.install-category-toggle\{[^}]*background:transparent[^}]*color:var\(--text\)/);
+});
+
+test('安装候选 Skill 按分类分组，未归类项进入独立分组', () => {
+  const groups = groupInstallableSkills({
+    skills: [
+      { id: 'alpha', name: 'Alpha', description: '第一个' },
+      { id: 'beta', name: 'Beta', description: '第二个' },
+      { id: 'orphan', name: 'Orphan', description: '未归类' },
+    ],
+    categories: [
+      { id: 'common', name: '通用', skillIds: ['alpha', 'beta'] },
+      { id: 'dev', name: '开发', skillIds: ['beta'] },
+    ],
+    keyword: '',
+  });
+
+  assert.deepEqual(groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    skillIds: group.skills.map((skill) => skill.id),
+  })), [
+    { id: 'common', name: '通用', skillIds: ['alpha', 'beta'] },
+    { id: 'uncategorized', name: '未分类', skillIds: ['orphan'] },
+  ]);
+});
+
+test('搜索安装候选时仅保留含匹配 Skill 的分类', () => {
+  const groups = groupInstallableSkills({
+    skills: [
+      { id: 'alpha', name: 'Alpha', description: '通用能力' },
+      { id: 'beta', name: 'Beta', description: '开发工具' },
+    ],
+    categories: [
+      { id: 'common', name: '通用', skillIds: ['alpha'] },
+      { id: 'dev', name: '开发', skillIds: ['beta'] },
+    ],
+    keyword: '工具',
+  });
+
+  assert.deepEqual(groups.map((group) => ({
+    id: group.id,
+    skillIds: group.skills.map((skill) => skill.id),
+  })), [{ id: 'dev', skillIds: ['beta'] }]);
+});
+
+test('安装管理列表允许单独删除健康、禁用和损坏的 Skill', () => {
   assert.match(MANAGER_PAGE, /skill\.isBroken/);
   assert.match(MANAGER_PAGE, /软链损坏/);
   assert.match(MANAGER_PAGE, /data-delete-skill=/);
-  assert.match(MANAGER_PAGE, /removeBrokenSkill\(/);
+  assert.match(MANAGER_PAGE, /removeSkill\(/);
+  assert.doesNotMatch(MANAGER_PAGE, /!skill\|\|!skill\.isBroken\|\|isUpdating/);
   assert.match(MANAGER_PAGE, /method:'DELETE',body:JSON\.stringify\(\{workspace:currentWorkspace,target:skill\.target,relativeDir:skill\.relativeDir\}\)/);
   assert.match(MANAGER_STYLES, /\.badge\.broken/);
 });
@@ -258,6 +318,16 @@ test('agents target 的卡片不渲染重复 badge', () => {
 test('轮询保留滚动位置，仅显式上下文变化时回顶', () => {
   assert.match(MANAGER_PAGE, /function renderSkills\(resetScroll=false\)/);
   assert.match(MANAGER_PAGE, /if\(resetScroll\)catalogScroll\.scrollTop=0/);
+  assert.match(MANAGER_PAGE, /function renderInstall\(force=false\)/);
+  assert.match(
+    MANAGER_PAGE,
+    /confirmInstallButton\.disabled=[^\n]+\n\s+if\(installDialog\.open&&!force\)return/,
+  );
+  assert.match(MANAGER_PAGE, /if\(installDialog\.open&&!force\)return/);
+  assert.match(
+    MANAGER_PAGE,
+    /installSkillSearch\.addEventListener\('keydown',[\s\S]*event\.key==='Enter'[\s\S]*event\.preventDefault\(\)/,
+  );
   assert.match(MANAGER_PAGE, /setInterval\(\(\)=>loadSkills\(false,false\),3000\)/);
 });
 

@@ -27,8 +27,8 @@ import {
 import { installCatalogSkills, spawnExternalSkillAdd } from './catalog-install.js';
 import {
   loadInstalledSkillDetail,
-  removeBrokenManagedSkill,
   removeManagedAgentSkills,
+  removeManagedSkill,
   scanInstalledWorkspace,
   setManagedSkillEnabled,
 } from './skill-manager.js';
@@ -194,7 +194,7 @@ async function routeWorkspaceApi(
   return false;
 }
 
-/** 处理当前 Workspace 的 Agent 扫描、文件启停和按分类安装。 */
+/** 处理当前 Workspace 的 Agent 扫描、Skill 启停、删除和按分类/单项安装。 */
 async function routeInstalledApi(
   request: IncomingMessage,
   response: ServerResponse,
@@ -240,7 +240,7 @@ async function routeInstalledApi(
     }
     getTarget(input.target);
     const workspace = readManagedWorkspace(input.workspace, env);
-    sendJson(response, removeBrokenManagedSkill({
+    sendJson(response, removeManagedSkill({
       workspaceRoot: workspace,
       target: input.target as TargetId,
       relativeDir: input.relativeDir,

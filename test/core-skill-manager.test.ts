@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, realpathSync, readlinkSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync, readlinkSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import * as skillManager from '../src/core/skill-manager.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
 
-const { removeBrokenManagedSkill, scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
+const { removeManagedSkill, scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
 
 test('扫描各 target 的启用、禁用和软链 skill', () => {
   const repo = createTmpRepo('skillctl-manager-scan-');
@@ -117,7 +117,7 @@ test('扫描会列出软链损坏的 skill，并允许只删除该链接', () =>
     assert.equal(cursor?.skillCount, 2);
     assert.equal(cursor?.enabledCount, 1);
 
-    const afterDelete = removeBrokenManagedSkill({
+    const afterDelete = removeManagedSkill({
       workspaceRoot: repo.root,
       target: 'cursor',
       relativeDir: 'broken-skill',
@@ -126,12 +126,104 @@ test('扫描会列出软链损坏的 skill，并允许只删除该链接', () =>
     assert.equal(afterDelete.skills.some((skill) => skill.name === 'review'), true);
     assert.throws(() => lstatSync(brokenPath), /ENOENT/);
     assert.equal(existsSync(join(repo.root, '.cursor/skills/review/SKILL.md')), true);
+  } finally {
+    repo.cleanup();
+  }
+});
 
-    assert.throws(() => removeBrokenManagedSkill({
+test('可单独删除复制、禁用和软链 Skill，并清理安装记录但保留软链源', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-skill-');
+  try {
+    repo.writeFile('.cursor/skills/copied/SKILL.md', '---\nname: copied\n---\n# copied');
+    repo.writeFile('.cursor/skills/disabled/SKILL.md.disable', '---\nname: disabled\n---\n# disabled');
+    repo.writeFile('sources/linked/SKILL.md', '---\nname: linked\n---\n# linked');
+    symlinkSync(
+      join(repo.root, 'sources/linked'),
+      join(repo.root, '.cursor/skills/linked'),
+      'dir',
+    );
+    repo.writeFile('.cursor/skills/.skillctl.json', JSON.stringify({
+      version: 1,
+      managedBy: 'skillctl',
+      skills: {
+        copied: { mode: 'copy', installedAt: '2026-08-28T00:00:00.000Z', sourceHash: 'sha256:x' },
+        disabled: { mode: 'copy', installedAt: '2026-08-28T00:00:00.000Z', sourceHash: 'sha256:y' },
+        linked: { mode: 'symlink', installedAt: '2026-08-28T00:00:00.000Z', sourceHash: null },
+      },
+    }));
+
+    removeManagedSkill({ workspaceRoot: repo.root, target: 'cursor', relativeDir: 'copied' });
+    removeManagedSkill({ workspaceRoot: repo.root, target: 'cursor', relativeDir: 'disabled' });
+    const after = removeManagedSkill({ workspaceRoot: repo.root, target: 'cursor', relativeDir: 'linked' });
+
+    assert.deepEqual(after?.skills, []);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills/copied')), false);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills/disabled')), false);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills/linked')), false);
+    assert.equal(existsSync(join(repo.root, 'sources/linked/SKILL.md')), true);
+    const record = JSON.parse(readFileSync(join(repo.root, '.cursor/skills/.skillctl.json'), 'utf8')) as {
+      skills: Record<string, unknown>;
+    };
+    assert.deepEqual(record.skills, {});
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('单独删除 Skill 拒绝路径越过 target 根目录', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-path-');
+  try {
+    repo.writeFile('.agents/skills/safe/SKILL.md', '# safe');
+    assert.throws(() => removeManagedSkill({
+      workspaceRoot: repo.root,
+      target: 'agents',
+      relativeDir: '../../outside',
+    }), /超出 target 根目录/);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Agent skills 根目录为软链时拒绝单删子 Skill，避免删除源目录', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-linked-root-child-');
+  try {
+    repo.writeFile('sources/cursor/review/SKILL.md', '# review');
+    repo.mkdir('.cursor');
+    symlinkSync(join(repo.root, 'sources/cursor'), join(repo.root, '.cursor/skills'), 'dir');
+
+    assert.throws(() => removeManagedSkill({
       workspaceRoot: repo.root,
       target: 'cursor',
       relativeDir: 'review',
-    }), /只能删除软链损坏的 skill/);
+    }), /skills 根目录为软链/);
+    assert.equal(existsSync(join(repo.root, 'sources/cursor/review/SKILL.md')), true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('安装记录按目录名清理，不删除同名展示字段对应的其他记录', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-record-key-');
+  try {
+    repo.writeFile(
+      '.cursor/skills/catalog-name/SKILL.md',
+      '---\nname: display-name\n---\n# catalog name',
+    );
+    repo.writeFile('.cursor/skills/.skillctl.json', JSON.stringify({
+      version: 1,
+      managedBy: 'skillctl',
+      skills: {
+        'catalog-name': { mode: 'copy', installedAt: '2026-08-28T00:00:00.000Z', sourceHash: 'sha256:x' },
+        'display-name': { mode: 'copy', installedAt: '2026-08-28T00:00:00.000Z', sourceHash: 'sha256:y' },
+      },
+    }));
+
+    removeManagedSkill({ workspaceRoot: repo.root, target: 'cursor', relativeDir: 'catalog-name' });
+
+    const record = JSON.parse(readFileSync(join(repo.root, '.cursor/skills/.skillctl.json'), 'utf8')) as {
+      skills: Record<string, unknown>;
+    };
+    assert.deepEqual(Object.keys(record.skills), ['display-name']);
   } finally {
     repo.cleanup();
   }
