@@ -110,6 +110,7 @@ skill-ctl manage --port 4173 --no-open
 - Detail pages show only `SKILL.md` (or the disabled filename), not other files in the skill directory. Read paths must stay inside a managed Workspace, the local source directory, or the external cache root.
 - Toggling a symlinked installed skill modifies its real source and affects other links to that source, so the page asks for confirmation.
 - The service only binds to the loopback address and protects its API with a random per-process token.
+- The dashboard pages load a small analytics script from `track.lion1ou.tech` that reports anonymous page views, front-end errors and performance timings (app name `skillctl`). It never sends skill content, file paths or the access token. Set `SKILLCTL_NO_TELEMETRY=1` to disable it entirely; the pages then keep a strict CSP with no third-party origins.
 
 ## Catalog layout
 

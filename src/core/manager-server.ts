@@ -33,6 +33,7 @@ import {
   setManagedSkillEnabled,
 } from './skill-manager.js';
 import { getTarget, TARGETS, type TargetId } from './targets.js';
+import { htmlPageRenderer, type HtmlPageRenderer } from './telemetry.js';
 import { pickWorkspaceDirectory } from './workspace-picker.js';
 import { CATALOG_PAGE } from '../ui/catalog-page.js';
 import { MANAGER_PAGE } from '../ui/manager-page.js';
@@ -77,16 +78,17 @@ async function routeManagerRequest(
 ): Promise<void> {
   try {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+    const page = htmlPageRenderer(options.env ?? process.env);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendHtml(response, MANAGER_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
+      sendHtml(response, MANAGER_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
       return;
     }
     if (request.method === 'GET' && url.pathname === '/catalog') {
-      sendHtml(response, CATALOG_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
+      sendHtml(response, CATALOG_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
       return;
     }
     if (request.method === 'GET' && (url.pathname === '/catalog/skill' || url.pathname === '/skill')) {
-      sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
+      sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
       return;
     }
     if (request.method === 'GET' && (
@@ -462,13 +464,13 @@ function sendJson(response: ServerResponse, value: unknown): void {
 }
 
 /** 返回内嵌管理页面，并限制页面只能访问当前本地服务。 */
-function sendHtml(response: ServerResponse, html: string): void {
+function sendHtml(response: ServerResponse, html: string, page: HtmlPageRenderer): void {
   response.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
-    'content-security-policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:",
+    'content-security-policy': page.csp,
     'cache-control': 'no-store',
   });
-  response.end(html);
+  response.end(page.render(html));
 }
 
 /** 返回打包内静态资源，并允许浏览器短时缓存。 */
