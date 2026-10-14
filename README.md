@@ -91,12 +91,13 @@ skill-ctl manage --port 4173 --no-open
 
 **Installed skills `/`**
 
-- Scans the user home directory by default, and can add project Workspaces through the native directory picker or an absolute path. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Batch-adding Agents only pins them for display; it does not pre-create directories.
+- Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. The source and cache fields in path settings use the same picker and are not saved until you confirm. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Batch-adding Agents only pins them for display; it does not pre-create directories.
 - The top-right Install button opens a category dialog and installs into the current Agent under the current Workspace. The enable/disable control on a card renames `SKILL.md` ↔ `SKILL.md.disable`.
 - Click a Skill card to open its detail page, which reads the landed `SKILL.md` in that Workspace/Agent (`SKILL.md.disable` when disabled). YAML frontmatter and Markdown body are shown separately. The enable/disable control does not open detail.
 - Removing a Workspace only removes the management entry; it never deletes project files. The user home Workspace cannot be removed.
 - Removing an Agent's skills deletes that Agent's skills directory in the current Workspace and unpins it. If the directory itself is a symlink, only the link is removed.
-- The page filters by name and status, places enabled skills before disabled ones, and refreshes filesystem state every three seconds.
+- The page filters by name, enabled state, broken links, symlinks, or copies. It places enabled skills before disabled ones and refreshes filesystem state every three seconds. Selected skills in the current result can be deleted together: a symlink removes only the link, a copy removes the installed directory, and the source is kept. One failure does not stop the rest.
+- A broken symlink can be restored by choosing a new source directory. That directory must exist and contain `SKILL.md` or `SKILL.md.disable`. The missing old source is left untouched.
 - Workspace paths and pinned Agents are stored in `~/.config/skillctl/config.json`.
 
 **Catalog `/catalog`**

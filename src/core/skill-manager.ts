@@ -8,6 +8,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   unlinkSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -48,6 +49,13 @@ export interface InstalledWorkspace {
   workspaceRoot: string;
   agents: ManagedAgent[];
   skills: ManagedSkill[];
+}
+
+export interface ManagedSkillRemoval {
+  target: TargetId;
+  relativeDir: string;
+  removed: boolean;
+  error?: string;
 }
 
 export interface InstalledSkillDetail {
@@ -151,6 +159,89 @@ export function removeManagedSkill(input: {
   if (hasRecord) {
     delete record.skills[input.relativeDir];
     writeInstallRecord(recordFile, record);
+  }
+  return scanInstalledWorkspace(workspaceRoot);
+}
+
+/** 按现有单条删除语义批量移除 Skill；单项失败不中断其余项。 */
+export function removeManagedSkills(input: {
+  workspaceRoot?: string;
+  skills: { target: TargetId; relativeDir: string }[];
+}): { workspace: InstalledWorkspace; results: ManagedSkillRemoval[] } {
+  if (input.skills.length === 0) throw new Error('请至少选择一个 Skill');
+  const workspaceRoot = resolve(input.workspaceRoot ?? homedir());
+  const results: ManagedSkillRemoval[] = [];
+  for (const skill of input.skills) {
+    try {
+      removeManagedSkill({
+        workspaceRoot,
+        target: skill.target,
+        relativeDir: skill.relativeDir,
+      });
+      results.push({ target: skill.target, relativeDir: skill.relativeDir, removed: true });
+    } catch (error) {
+      results.push({
+        target: skill.target,
+        relativeDir: skill.relativeDir,
+        removed: false,
+        error: error instanceof Error ? error.message : '删除失败',
+      });
+    }
+  }
+  return { workspace: scanInstalledWorkspace(workspaceRoot), results };
+}
+
+/** 用新的 Skill 源目录替换损坏软链；不改动已丢失的旧源。 */
+export function restoreBrokenSkillSymlink(input: {
+  workspaceRoot?: string;
+  target: TargetId;
+  relativeDir: string;
+  sourcePath: string;
+}): InstalledWorkspace {
+  const workspaceRoot = resolve(input.workspaceRoot ?? homedir());
+  const targetRoot = resolve(workspaceRoot, getTarget(input.target).skillsDir);
+  const skillDir = resolve(targetRoot, input.relativeDir);
+  if (skillDir === targetRoot || !skillDir.startsWith(`${targetRoot}${sep}`)) {
+    throw new Error('skill 路径超出 target 根目录');
+  }
+  const skill = scanManagedSkills(workspaceRoot).find((item) =>
+    item.target === input.target && item.relativeDir === input.relativeDir);
+  if (!skill) throw new Error('未找到要管理的 skill');
+  if (!skill.isBroken || !skill.isSymlink) throw new Error('该 Skill 不是损坏软链');
+  if (lstatSync(targetRoot).isSymbolicLink()) {
+    throw new Error('Agent skills 根目录为软链，不能单独恢复其中的 Skill');
+  }
+
+  const sourcePath = resolve(input.sourcePath);
+  let sourceState: ReturnType<typeof statSync>;
+  try {
+    sourceState = statSync(sourcePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`源目录不存在：${sourcePath}`);
+    }
+    throw error;
+  }
+  if (!sourceState.isDirectory()) throw new Error(`源目录不存在或不是目录：${sourcePath}`);
+  if (sourcePath === skillDir || sourcePath.startsWith(`${skillDir}${sep}`)) {
+    throw new Error('新源目录不能是这条软链自身');
+  }
+  const hasSkillFile = existsSync(join(sourcePath, ENABLED_FILE)) || existsSync(join(sourcePath, DISABLED_FILE));
+  if (!hasSkillFile) throw new Error(`源目录缺少 SKILL.md：${sourcePath}`);
+
+  const previousTarget = readlinkSync(skill.installedPath);
+  unlinkSync(skill.installedPath);
+  try {
+    symlinkSync(sourcePath, skill.installedPath);
+  } catch (error) {
+    try {
+      symlinkSync(previousTarget, skill.installedPath);
+    } catch (rollbackError) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const rollback = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+      throw new Error(`恢复软链失败，且无法还原原链接：${reason}；回滚失败：${rollback}`);
+    }
+    throw error;
   }
   return scanInstalledWorkspace(workspaceRoot);
 }

@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, readFileSync, realpathSync, readlinkSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync, readlinkSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import * as skillManager from '../src/core/skill-manager.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
 
-const { removeManagedSkill, scanInstalledWorkspace, scanManagedSkills, setManagedSkillEnabled } = skillManager;
+const {
+  removeManagedSkill,
+  removeManagedSkills,
+  restoreBrokenSkillSymlink,
+  scanInstalledWorkspace,
+  scanManagedSkills,
+  setManagedSkillEnabled,
+} = skillManager;
 
 test('扫描各 target 的启用、禁用和软链 skill', () => {
   const repo = createTmpRepo('skillctl-manager-scan-');
@@ -224,6 +231,128 @@ test('安装记录按目录名清理，不删除同名展示字段对应的其�
       skills: Record<string, unknown>;
     };
     assert.deepEqual(Object.keys(record.skills), ['display-name']);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('批量删除继续处理其余 Skill，并汇总失败项', () => {
+  const repo = createTmpRepo('skillctl-manager-remove-batch-');
+  try {
+    repo.writeFile('.cursor/skills/keep/SKILL.md', '---\nname: keep\n---\n# keep');
+    repo.writeFile('.cursor/skills/copied/SKILL.md', '---\nname: copied\n---\n# copied');
+    repo.writeFile('sources/linked/SKILL.md', '---\nname: linked\n---\n# linked');
+    symlinkSync(join(repo.root, 'sources/linked'), join(repo.root, '.cursor/skills/linked'), 'dir');
+
+    const outcome = removeManagedSkills({
+      workspaceRoot: repo.root,
+      skills: [
+        { target: 'cursor', relativeDir: 'copied' },
+        { target: 'cursor', relativeDir: 'missing' },
+        { target: 'cursor', relativeDir: 'linked' },
+      ],
+    });
+
+    assert.deepEqual(outcome.results.map((item) => [item.relativeDir, item.removed]), [
+      ['copied', true],
+      ['missing', false],
+      ['linked', true],
+    ]);
+    assert.match(outcome.results[1]?.error ?? '', /未找到要管理的 skill/);
+    assert.deepEqual(outcome.workspace.skills.map((skill) => skill.name), ['keep']);
+    assert.equal(existsSync(join(repo.root, 'sources/linked/SKILL.md')), true);
+    assert.equal(existsSync(join(repo.root, '.cursor/skills/linked')), false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('损坏软链可指向新的 Skill 源目录', () => {
+  const repo = createTmpRepo('skillctl-manager-restore-link-');
+  try {
+    const missingSource = join(repo.root, 'missing-source');
+    const brokenPath = join(repo.root, '.cursor/skills/broken-skill');
+    repo.mkdir('.cursor/skills');
+    symlinkSync(missingSource, brokenPath, 'dir');
+    repo.writeFile('sources/restored/SKILL.md', [
+      '---',
+      'name: restored',
+      'description: 已恢复',
+      '---',
+    ].join('\n'));
+
+    const workspace = restoreBrokenSkillSymlink({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'broken-skill',
+      sourcePath: join(repo.root, 'sources/restored'),
+    });
+    const restored = workspace.skills.find((skill) => skill.relativeDir === 'broken-skill');
+
+    assert.equal(restored?.isBroken, false);
+    assert.equal(restored?.isSymlink, true);
+    assert.equal(restored?.isEnabled, true);
+    assert.equal(restored?.name, 'restored');
+    assert.equal(readlinkSync(brokenPath), join(repo.root, 'sources/restored'));
+    assert.equal(existsSync(missingSource), false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('恢复软链拒绝不存在、缺少 Skill 文件或并非损坏链接的目标', () => {
+  const repo = createTmpRepo('skillctl-manager-restore-reject-');
+  try {
+    repo.writeFile('.cursor/skills/copied/SKILL.md', '---\nname: copied\n---\n# copied');
+    symlinkSync(join(repo.root, 'missing-source'), join(repo.root, '.cursor/skills/broken-skill'), 'dir');
+    repo.writeFile('sources/empty-dir/.gitkeep', '');
+    const brokenPath = join(repo.root, '.cursor/skills/broken-skill');
+    const previousTarget = readlinkSync(brokenPath);
+
+    assert.throws(() => restoreBrokenSkillSymlink({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'copied',
+      sourcePath: join(repo.root, 'sources/empty-dir'),
+    }), /不是损坏软链/);
+    assert.throws(() => restoreBrokenSkillSymlink({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'broken-skill',
+      sourcePath: join(repo.root, 'sources/empty-dir'),
+    }), /SKILL\.md/);
+    assert.throws(() => restoreBrokenSkillSymlink({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'broken-skill',
+      sourcePath: join(repo.root, 'sources/absent'),
+    }), /源目录不存在/);
+    assert.equal(readlinkSync(brokenPath), previousTarget);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Agent skills 根目录为软链时拒绝恢复子 Skill，避免改写源目录', () => {
+  const repo = createTmpRepo('skillctl-manager-restore-linked-root-');
+  try {
+    repo.writeFile('sources/cursor/broken-skill/SKILL.md', '---\nname: broken\n---\n# broken');
+    repo.mkdir('.cursor');
+    symlinkSync(join(repo.root, 'sources/cursor'), join(repo.root, '.cursor/skills'), 'dir');
+    const brokenPath = join(repo.root, 'sources/cursor/broken-skill');
+    const missingSource = join(repo.root, 'missing-source');
+    rmSync(brokenPath, { recursive: true });
+    symlinkSync(missingSource, brokenPath, 'dir');
+    repo.writeFile('sources/restored/SKILL.md', '---\nname: restored\n---\n# restored');
+
+    assert.throws(() => restoreBrokenSkillSymlink({
+      workspaceRoot: repo.root,
+      target: 'cursor',
+      relativeDir: 'broken-skill',
+      sourcePath: join(repo.root, 'sources/restored'),
+    }), /skills 根目录为软链/);
+    assert.equal(readlinkSync(brokenPath), missingSource);
+    assert.equal(existsSync(join(repo.root, 'sources/restored/SKILL.md')), true);
   } finally {
     repo.cleanup();
   }

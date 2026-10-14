@@ -29,12 +29,14 @@ import {
   loadInstalledSkillDetail,
   removeManagedAgentSkills,
   removeManagedSkill,
+  removeManagedSkills,
+  restoreBrokenSkillSymlink,
   scanInstalledWorkspace,
   setManagedSkillEnabled,
 } from './skill-manager.js';
 import { getTarget, TARGETS, type TargetId } from './targets.js';
 import { htmlPageRenderer, type HtmlPageRenderer } from './telemetry.js';
-import { pickWorkspaceDirectory } from './workspace-picker.js';
+import { pickDirectory, type DirectoryPickKind } from './workspace-picker.js';
 import { CATALOG_PAGE } from '../ui/catalog-page.js';
 import { MANAGER_PAGE } from '../ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../ui/skill-detail-page.js';
@@ -49,7 +51,7 @@ export interface ManagerServer {
 interface ManagerServerOptions {
   port: number;
   env?: NodeJS.ProcessEnv;
-  pickWorkspace?: () => Promise<string | null>;
+  pickWorkspace?: (kind?: DirectoryPickKind) => Promise<string | null>;
 }
 
 /** 在本机回环地址启动管理服务，并用随机令牌保护写操作与扫描结果。 */
@@ -163,8 +165,19 @@ async function routeWorkspaceApi(
     sendWorkspaceConfig(response, env);
     return true;
   }
+  if (request.method === 'POST' && url.pathname === '/api/directories/pick') {
+    const input = await readJson(request, 1024);
+    const kind = readDirectoryPickKind(input.kind);
+    const selected = options.pickWorkspace
+      ? await options.pickWorkspace(kind)
+      : await pickDirectory(kind);
+    sendJson(response, { path: selected });
+    return true;
+  }
   if (request.method === 'POST' && url.pathname === '/api/workspaces/pick') {
-    const selected = await (options.pickWorkspace ?? pickWorkspaceDirectory)();
+    const selected = options.pickWorkspace
+      ? await options.pickWorkspace('workspace')
+      : await pickDirectory('workspace');
     if (selected) addManagedWorkspace(selected, env);
     sendWorkspaceConfig(response, env, selected);
     return true;
@@ -232,6 +245,29 @@ async function routeInstalledApi(
       target: input.target as TargetId,
       relativeDir: input.relativeDir,
       isEnabled: input.isEnabled,
+    }));
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/skills/remove') {
+    const input = await readJson(request, 64 * 1024);
+    const workspace = readManagedWorkspace(input.workspace, env);
+    const outcome = removeManagedSkills({
+      workspaceRoot: workspace,
+      skills: readSkillRefs(input.skills),
+    });
+    sendJson(response, { ...outcome.workspace, results: outcome.results });
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/skills/restore') {
+    const input = await readJson(request, 8192);
+    const target = readString(input.target, 'target') as TargetId;
+    getTarget(target);
+    const workspace = readManagedWorkspace(input.workspace, env);
+    sendJson(response, restoreBrokenSkillSymlink({
+      workspaceRoot: workspace,
+      target,
+      relativeDir: readString(input.relativeDir, 'relativeDir'),
+      sourcePath: readString(input.sourcePath, 'sourcePath'),
     }));
     return true;
   }
@@ -413,6 +449,22 @@ function queryId(url: URL): string {
   const id = url.searchParams.get('id')?.trim();
   if (!id) throw new Error('缺少 id');
   return id;
+}
+
+function readDirectoryPickKind(value: unknown): DirectoryPickKind {
+  if (value === 'workspace' || value === 'source' || value === 'cache' || value === 'restore') return value;
+  throw new Error('kind 必须是 workspace、source、cache 或 restore');
+}
+
+function readSkillRefs(value: unknown): { target: TargetId; relativeDir: string }[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('请至少选择一个 Skill');
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('skills 项必须是对象');
+    const record = item as Record<string, unknown>;
+    const target = readString(record.target, 'target') as TargetId;
+    getTarget(target);
+    return { target, relativeDir: readString(record.relativeDir, 'relativeDir') };
+  });
 }
 
 /** 读取必填字符串字段。 */

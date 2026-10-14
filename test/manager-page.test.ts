@@ -7,7 +7,12 @@ import * as managerPage from '../src/ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../src/ui/skill-detail-page.js';
 
 const { CATALOG_PAGE } = catalogPage;
-const { groupInstallableSkills, MANAGER_PAGE, visibleAgentsForWorkspace } = managerPage;
+const {
+  groupInstallableSkills,
+  MANAGER_PAGE,
+  matchesInstalledSkillFilter,
+  visibleAgentsForWorkspace,
+} = managerPage;
 
 function inlineScripts(page: string): string[] {
   return [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
@@ -240,6 +245,73 @@ test('搜索安装候选时仅保留含匹配 Skill 的分类', () => {
     id: group.id,
     skillIds: group.skills.map((skill) => skill.id),
   })), [{ id: 'dev', skillIds: ['beta'] }]);
+});
+
+test('已安装 Skill 可按启用状态、失效和安装方式同时筛选', () => {
+  const enabledLink = {
+    name: 'linked',
+    description: '软链能力',
+    installedPath: '/ws/.cursor/skills/linked',
+    target: 'cursor',
+    linkTarget: '/ws/sources/linked',
+    isBroken: false,
+    isEnabled: true,
+    isSymlink: true,
+  };
+  const disabledCopy = {
+    name: 'copied',
+    description: '复制能力',
+    installedPath: '/ws/.cursor/skills/copied',
+    target: 'cursor',
+    isBroken: false,
+    isEnabled: false,
+    isSymlink: false,
+  };
+  const broken = {
+    name: 'broken-skill',
+    description: '软链目标不存在或不是目录',
+    installedPath: '/ws/.cursor/skills/broken-skill',
+    target: 'cursor',
+    linkTarget: '/ws/missing-source',
+    isBroken: true,
+    isEnabled: false,
+    isSymlink: true,
+  };
+
+  assert.equal(matchesInstalledSkillFilter(enabledLink, { keyword: '', status: 'on', installMode: '' }), true);
+  assert.equal(matchesInstalledSkillFilter(broken, { keyword: '', status: 'on', installMode: '' }), false);
+  assert.equal(matchesInstalledSkillFilter(disabledCopy, { keyword: '', status: 'off', installMode: 'copy' }), true);
+  assert.equal(matchesInstalledSkillFilter(broken, { keyword: '', status: 'off', installMode: '' }), false);
+  assert.equal(matchesInstalledSkillFilter(broken, { keyword: 'missing', status: 'broken', installMode: 'symlink' }), true);
+  assert.equal(matchesInstalledSkillFilter(broken, { keyword: '', status: 'broken', installMode: 'copy' }), false);
+  assert.equal(matchesInstalledSkillFilter(enabledLink, { keyword: '', status: '', installMode: 'symlink' }), true);
+  assert.equal(matchesInstalledSkillFilter(enabledLink, { keyword: '不存在', status: '', installMode: '' }), false);
+});
+
+test('安装管理列表支持批量选择删除，并为损坏软链提供恢复入口', () => {
+  assert.match(MANAGER_PAGE, /id="installModeFilter"/);
+  assert.match(MANAGER_PAGE, /<option value="broken">已失效<\/option>/);
+  assert.match(MANAGER_PAGE, /<option value="symlink">软链<\/option>/);
+  assert.match(MANAGER_PAGE, /<option value="copy">复制<\/option>/);
+  assert.match(MANAGER_PAGE, /id="selectVisibleSkillsButton"/);
+  assert.match(MANAGER_PAGE, /id="deleteSelectedButton"/);
+  assert.match(MANAGER_PAGE, /data-select-skill=/);
+  assert.match(MANAGER_PAGE, /data-restore-skill=/);
+  assert.match(MANAGER_PAGE, /\/api\/skills\/remove/);
+  assert.match(MANAGER_PAGE, /\/api\/skills\/restore/);
+  assert.match(MANAGER_PAGE, /id="restoreSourcePath"/);
+  assert.match(MANAGER_PAGE, /pickDirectory\('workspace'\)/);
+  assert.match(MANAGER_PAGE, /workspacePath\.value=path/);
+  assert.doesNotMatch(MANAGER_PAGE, /\/api\/workspaces\/pick/);
+});
+
+test('路径输入框通过目录选择器填入，不直接提交', () => {
+  assert.match(MANAGER_PAGE, /data-pick-kind="source"/);
+  assert.match(MANAGER_PAGE, /data-pick-kind="cache"/);
+  assert.match(MANAGER_PAGE, /data-pick-kind="restore"/);
+  assert.match(MANAGER_PAGE, /\/api\/directories\/pick/);
+  assert.match(CATALOG_PAGE, /data-pick-kind="source"/);
+  assert.match(CATALOG_PAGE, /data-pick-kind="cache"/);
 });
 
 test('安装管理列表允许单独删除健康、禁用和损坏的 Skill', () => {

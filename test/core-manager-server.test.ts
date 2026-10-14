@@ -260,6 +260,95 @@ test('管理服务扫描并删除软链损坏的 skill', async () => {
   }
 });
 
+test('目录选择只返回路径，批量删除和软链恢复走对应接口', async () => {
+  const repo = createTmpRepo('skillctl-manager-batch-restore-');
+  const env = {
+    HOME: repo.root,
+    XDG_CONFIG_HOME: join(repo.root, 'config'),
+  } as NodeJS.ProcessEnv;
+  const workspace = join(repo.root, 'project');
+  const pickedPath = join(repo.root, 'picked-directory');
+  repo.mkdir('picked-directory');
+  repo.writeFile('project/.cursor/skills/keep/SKILL.md', '---\nname: keep\n---\n# keep');
+  repo.writeFile('project/.cursor/skills/remove/SKILL.md', '---\nname: remove\n---\n# remove');
+  symlinkSync(join(repo.root, 'missing-source'), join(workspace, '.cursor/skills/broken-skill'), 'dir');
+  repo.writeFile('sources/restored/SKILL.md.disable', '---\nname: restored\n---\n# restored');
+  initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
+  repo.writeFile(`catalog/${SKILLS_FILE}`, JSON.stringify({ version: 1, skills: [] }));
+  repo.writeFile(`catalog/${CATEGORIES_FILE}`, JSON.stringify({ version: 1, categories: [] }));
+  const manager = await startManagerServer({
+    port: 0,
+    env,
+    pickWorkspace: async () => pickedPath,
+  });
+  try {
+    const html = await (await fetch(manager.url)).text();
+    const token = html.match(/const token="([^"]+)"/)?.[1];
+    assert.ok(token);
+    const request = (path: string, options: RequestInit = {}) => fetch(`${manager.url}${path}`, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        'x-skillctl-token': token,
+        ...options.headers,
+      },
+    });
+
+    const picked = await request('/api/directories/pick', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'source' }),
+    });
+    assert.equal(picked.status, 200);
+    assert.deepEqual(await picked.json(), { path: pickedPath });
+    const listed = await (await request('/api/workspaces')).json() as {
+      workspaces: { path: string }[];
+    };
+    assert.equal(listed.workspaces.some((item) => item.path === pickedPath), false);
+
+    await request('/api/workspaces', { method: 'POST', body: JSON.stringify({ path: workspace }) });
+    const restored = await request('/api/skills/restore', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace,
+        target: 'cursor',
+        relativeDir: 'broken-skill',
+        sourcePath: join(repo.root, 'sources/restored'),
+      }),
+    });
+    assert.equal(restored.status, 200);
+    const restoredBody = await restored.json() as {
+      skills: { name: string; isBroken: boolean; isEnabled: boolean }[];
+    };
+    const restoredSkill = restoredBody.skills.find((skill) => skill.name === 'restored');
+    assert.equal(restoredSkill?.isBroken, false);
+    assert.equal(restoredSkill?.isEnabled, false);
+
+    const removed = await request('/api/skills/remove', {
+      method: 'POST',
+      body: JSON.stringify({
+        workspace,
+        skills: [
+          { target: 'cursor', relativeDir: 'remove' },
+          { target: 'cursor', relativeDir: 'missing' },
+        ],
+      }),
+    });
+    assert.equal(removed.status, 200);
+    const removedBody = await removed.json() as {
+      skills: { name: string }[];
+      results: { relativeDir: string; removed: boolean }[];
+    };
+    assert.deepEqual(removedBody.results.map((item) => [item.relativeDir, item.removed]), [
+      ['remove', true],
+      ['missing', false],
+    ]);
+    assert.deepEqual(removedBody.skills.map((skill) => skill.name).sort(), ['keep', 'restored']);
+  } finally {
+    await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
+    repo.cleanup();
+  }
+});
+
 test('管理服务可删除 Workspace 中健康的单个 Skill', async () => {
   const repo = createTmpRepo('skillctl-manager-remove-healthy-skill-');
   const env = {

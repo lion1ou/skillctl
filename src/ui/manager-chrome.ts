@@ -19,7 +19,7 @@ export const MANAGER_STYLES = `
     .workspace-tab{height:auto;min-height:32px;padding:6px 11px;border-radius:6px;background:transparent;color:var(--muted);border:1px solid transparent;font-weight:500}
     .workspace-tab:hover{background:#FBFBFA;border-color:var(--line)}.workspace-tab.active{color:var(--text);background:#FFFFFF;border-color:#DCDCD8}
     .toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 180px 180px;gap:10px;margin-bottom:20px}
-    .installed-toolbar{grid-template-columns:minmax(220px,1fr) 180px auto}.installed-toolbar>button{min-width:116px}
+    .installed-toolbar{grid-template-columns:minmax(160px,1fr) 128px 128px auto auto auto;align-items:center}.installed-toolbar>button{min-width:96px}
     input,select,textarea{width:100%;padding:0 12px;border:1px solid #DEDEDB;border-radius:6px;background:#FFFFFF;color:var(--text);outline:none;font:inherit}
     input,select{height:36px}textarea{min-height:56px;padding:8px 10px;resize:vertical}
     select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m3 5 4 4 4-4' stroke='%23787774' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:14px}
@@ -28,7 +28,7 @@ export const MANAGER_STYLES = `
     .card{display:flex;flex-direction:column;min-width:0;padding:16px;border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;transition:transform .2s ease,box-shadow .2s ease}
     .card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(47,52,55,.04)}.card.clickable{cursor:pointer}.card.clickable:focus-visible{outline:2px solid #787774;outline-offset:2px}
     .card>button{margin-top:auto}
-    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:2.7em}.name{font-size:14px;font-weight:600;overflow-wrap:anywhere;line-height:1.35}
+    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:2.7em}.skill-title{display:flex;align-items:flex-start;gap:8px;min-width:0}.skill-select{display:grid;place-items:center;flex:none;margin-top:1px}.skill-select input{width:16px;height:16px;flex:none}.name{font-size:14px;font-weight:600;overflow-wrap:anywhere;line-height:1.35}
     .badges{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}.badge{padding:2px 7px;border-radius:9999px;background:#F1F1EF;color:#666662;font-size:10px;line-height:1.5;letter-spacing:.04em;text-transform:uppercase}
     .badge.on{background:#EDF3EC;color:var(--green)}.badge.off{background:#FDEBEC;color:var(--red)}.badge.broken{background:#FDEBEC;color:var(--red)}
     .badge.local,.badge.symlink,.badge.category{background:#FBF3DB;color:#956400}.badge.external,.badge.copy,.badge.uncategorized{background:#F1F1EF;color:#666662}
@@ -63,7 +63,8 @@ export const MANAGER_STYLES = `
     .list{overflow:visible;padding:8px 8px 0 0}.agent-row{position:relative;display:flex;gap:5px;align-items:stretch;overflow:visible;margin-bottom:6px}.agent-row>button[data-agent]{flex:1;margin-bottom:0}
     .corner-delete{position:absolute;top:-8px;right:-8px;z-index:2;width:20px!important;height:20px!important;min-height:0!important;padding:0!important;border-radius:9999px!important;border:1px solid #F4DADB;background:#FDEBEC;color:var(--red);font-size:14px;line-height:1;display:grid;place-items:center;box-shadow:0 1px 3px rgba(47,52,55,.08)}.corner-delete:hover{background:#F9DDDF}
     .install-groups{display:grid;gap:8px;max-height:360px;overflow:auto;margin-top:12px}.install-group{border:1px solid var(--line);border-radius:6px;overflow:hidden}.install-group-head{display:flex;align-items:center;background:#FAF9F7}.install-category-check{display:grid;place-items:center;padding:10px 4px 10px 12px}.install-category-check input{width:16px;height:16px;flex:none}.install-category-toggle{display:flex;align-items:center;gap:8px;flex:1;height:auto;padding:10px 12px 10px 6px;border:0;background:transparent;color:var(--text);text-align:left}.install-category-toggle:hover{background:#F5F4F1}.install-category-toggle>span:first-child{flex:1;font-weight:600}.install-category-toggle small{color:var(--muted)}.install-chevron{font-size:18px;line-height:1;transition:transform .15s}.install-category-toggle[aria-expanded="true"] .install-chevron{transform:rotate(90deg)}.install-group-skills{display:grid;gap:6px;padding:8px;border-top:1px solid var(--line)}.install-group-skills label{display:flex;align-items:flex-start;gap:9px;padding:9px;border-radius:6px}.install-group-skills label:hover{background:#F7F6F3}.install-group-skills input{width:16px;height:16px;margin-top:2px;flex:none}.install-group-skills strong,.install-group-skills small{display:block}.install-group-skills small{color:var(--muted);font:11px/1.4 "Geist Mono","SF Mono",monospace}
-    .field{display:grid;gap:6px;margin:8px 0}.field span{color:var(--muted);font-size:12px}
+    .field{display:grid;gap:6px;margin:8px 0}.field>span{color:var(--muted);font-size:12px}
+    .path-input{display:flex;gap:8px;align-items:center}.path-input>input{flex:1;min-width:0}.path-input>button{flex:none;height:36px}
     .choice-list{display:grid;gap:6px;max-height:320px;overflow:auto;margin-top:12px}.choice-list label{display:flex;align-items:flex-start;gap:9px;padding:9px;border:1px solid var(--line);border-radius:6px}.choice-list input{width:16px;height:16px;margin-top:2px;flex:none}.choice-list strong,.choice-list small{display:block}.choice-list small{color:var(--muted);font:11px/1.4 "Geist Mono","SF Mono",monospace}
     .check-row{display:flex;gap:8px;align-items:center;color:#555A5D}.check-row input{width:16px;height:16px;flex:none}
     .detail-header{align-items:flex-start}.back-link{display:inline-block;margin-top:18px;color:var(--muted);text-decoration:none}.back-link:hover{color:var(--text)}
@@ -108,8 +109,8 @@ export function renderInitializationDialog(): string {
     <form class="init-form" id="initializationForm">
       <h2>初始化 skillctl</h2>
       <p class="subtitle">关联 Skill 源目录和缓存目录。源目录缺少配置表时会自动创建。</p>
-      <label><span>Skill 源目录（绝对路径）</span><input name="sourceDir" placeholder="/Users/name/skill-catalog" required></label>
-      <label><span>缓存目录（绝对路径）</span><input name="cacheDir" placeholder="/Users/name/.cache/skillctl" required></label>
+      <label><span>Skill 源目录（绝对路径）</span><span class="path-input"><input name="sourceDir" placeholder="/Users/name/skill-catalog" required><button type="button" class="ghost" data-pick-kind="source">选择目录</button></span></label>
+      <label><span>缓存目录（绝对路径）</span><span class="path-input"><input name="cacheDir" placeholder="/Users/name/.cache/skillctl" required><button type="button" class="ghost" data-pick-kind="cache">选择目录</button></span></label>
       <div class="notice" id="initializationNotice"></div>
       <p class="config-path" id="configPath"></p>
       <div class="actions">
@@ -131,6 +132,7 @@ async function setupInitialization(onInitialized){
   const configPath=document.querySelector('#configPath');
   const initializationNotice=document.querySelector('#initializationNotice');
   let status={initialized:false,sourceDir:'',cacheDir:'',configPath:''};
+  let isPickingDirectory=false;
 
   function applyStatus(next){
     status=next;
@@ -148,6 +150,24 @@ async function setupInitialization(onInitialized){
     initializationNotice.classList.add('show');
   }
 
+  dialog.addEventListener('click',async(event)=>{
+    const button=event.target.closest('[data-pick-kind]');
+    if(!button||isPickingDirectory)return;
+    const kind=button.dataset.pickKind;
+    const input=form.elements[kind==='cache'?'cacheDir':'sourceDir'];
+    if(!input)return;
+    isPickingDirectory=true;
+    button.disabled=true;
+    try{
+      const data=await request('/api/directories/pick',{method:'POST',body:JSON.stringify({kind})});
+      if(data.path)input.value=data.path;
+    }catch(error){
+      showInitializationError(error);
+    }finally{
+      isPickingDirectory=false;
+      button.disabled=false;
+    }
+  });
   entry.addEventListener('click',openDialog);
   cancel.addEventListener('click',()=>dialog.close());
   dialog.addEventListener('cancel',(event)=>{
