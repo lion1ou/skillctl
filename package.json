@@ -1,6 +1,6 @@
 {
   "name": "@lion1ou/skill-ctl",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Configuration-driven Agent Skill catalog installer.",
   "license": "MIT",
   "author": "lion1ou",
