@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -166,7 +167,7 @@ test('外部 skill 默认缓存在 CLI 脚本目录 .cache', () => {
   );
 });
 
-test('可添加 Workspace 并为其固定要展示的 Agent', () => {
+test('可添加 Workspace 并为其固定要展示的 Agent，同时创建 skills 目录', () => {
   const repo = createTmpRepo('skillctl-workspaces-');
   try {
     const env = {
@@ -178,12 +179,50 @@ test('可添加 Workspace 并为其固定要展示的 Agent', () => {
     initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
 
     addManagedWorkspace(workspace, env);
+    assert.equal(existsSync(join(workspace, '.cursor/skills')), false);
     setWorkspaceTargetPinned(workspace, 'cursor', true, env);
 
     assert.deepEqual(loadCliConfig(env).workspaces, [
       { path: repo.root, pinnedTargetIds: [] },
       { path: workspace, pinnedTargetIds: ['cursor'] },
     ]);
+    assert.equal(existsSync(join(workspace, '.cursor/skills')), true);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('初始化支持远程 git 源，clone 到配置目录并记录 sourceRemote', () => {
+  const repo = createTmpRepo('skillctl-init-git-');
+  try {
+    const remoteRoot = join(repo.root, 'remote');
+    mkdirSync(join(remoteRoot, 'skills'), { recursive: true });
+    writeFileSync(join(remoteRoot, SKILLS_FILE), `${JSON.stringify({ version: 1, skills: [] })}\n`);
+    writeFileSync(
+      join(remoteRoot, CATEGORIES_FILE),
+      `${JSON.stringify({ version: 1, categories: [] })}\n`,
+    );
+    execFileSync('git', ['init'], { cwd: remoteRoot, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], {
+      cwd: remoteRoot,
+      stdio: 'ignore',
+    });
+    execFileSync('git', ['config', 'user.name', 'test'], { cwd: remoteRoot, stdio: 'ignore' });
+    execFileSync('git', ['add', '.'], { cwd: remoteRoot, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: remoteRoot, stdio: 'ignore' });
+
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
+    const remote = `file://${remoteRoot}`;
+    const cacheDir = join(repo.root, 'cache');
+    const config = initializeCliConfig({ sourceDir: remote, cacheDir, env });
+
+    assert.equal(config.sourceRemote, remote);
+    assert.equal(config.sourceDir, join(repo.root, 'config/skillctl/sources/file/remote'));
+    assert.equal(existsSync(join(config.sourceDir, SKILLS_FILE)), true);
+    assert.equal(loadCliConfig(env).sourceRemote, remote);
   } finally {
     repo.cleanup();
   }

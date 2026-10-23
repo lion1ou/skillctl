@@ -5,7 +5,6 @@ import type { AddressInfo } from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  addManagedWorkspace,
   initializeCliConfig,
   loadCliConfig,
   peekCliConfig,
@@ -36,7 +35,13 @@ import {
 } from './skill-manager.js';
 import { getTarget, TARGETS, type TargetId } from './targets.js';
 import { htmlPageRenderer, type HtmlPageRenderer } from './telemetry.js';
+import {
+  addAndBootstrapWorkspace,
+  ensureCliInitializedFromProject,
+  syncWorkspaceProjectAfterChange,
+} from './workspace-bootstrap.js';
 import { pickDirectory, type DirectoryPickKind } from './workspace-picker.js';
+import { readWorkspaceProject } from './workspace-project.js';
 import { CATALOG_PAGE } from '../ui/catalog-page.js';
 import { MANAGER_PAGE } from '../ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../ui/skill-detail-page.js';
@@ -125,11 +130,14 @@ async function routeConfigApi(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<boolean> {
   if (request.method === 'GET' && url.pathname === '/api/status') {
+    ensureCliInitializedFromProject(process.cwd(), env);
     const config = peekCliConfig(env);
+    const cwdProject = readWorkspaceProject(process.cwd());
     sendJson(response, {
       initialized: config !== null,
       configPath: resolveCliConfigPath(env),
       sourceDir: config?.sourceDir ?? '',
+      sourceRemote: config?.sourceRemote ?? cwdProject?.sourceRemote ?? '',
       cacheDir: config?.cacheDir ?? resolveSkillCacheDir(),
     });
     return true;
@@ -146,6 +154,7 @@ async function routeConfigApi(
       initialized: true,
       configPath: resolveCliConfigPath(env),
       sourceDir: config.sourceDir,
+      sourceRemote: config.sourceRemote ?? '',
       cacheDir: config.cacheDir,
     });
     return true;
@@ -178,14 +187,14 @@ async function routeWorkspaceApi(
     const selected = options.pickWorkspace
       ? await options.pickWorkspace('workspace')
       : await pickDirectory('workspace');
-    if (selected) addManagedWorkspace(selected, env);
+    if (selected) await addAndBootstrapWorkspace(selected, env);
     sendWorkspaceConfig(response, env, selected);
     return true;
   }
   if (request.method === 'POST' && url.pathname === '/api/workspaces') {
     const input = await readJson(request, 4096);
     const selected = readString(input.path, 'path');
-    addManagedWorkspace(selected, env);
+    await addAndBootstrapWorkspace(selected, env);
     sendWorkspaceConfig(response, env, resolve(selected));
     return true;
   }
@@ -255,6 +264,7 @@ async function routeInstalledApi(
       workspaceRoot: workspace,
       skills: readSkillRefs(input.skills),
     });
+    syncWorkspaceProjectAfterChange(workspace, env);
     sendJson(response, { ...outcome.workspace, results: outcome.results });
     return true;
   }
@@ -283,6 +293,7 @@ async function routeInstalledApi(
       target: input.target as TargetId,
       relativeDir: input.relativeDir,
     }));
+    syncWorkspaceProjectAfterChange(workspace, env);
     return true;
   }
   if (request.method === 'DELETE' && url.pathname === '/api/skills/agent') {
@@ -292,6 +303,7 @@ async function routeInstalledApi(
     getTarget(target);
     const removal = removeManagedAgentSkills({ workspaceRoot: workspace, target });
     setWorkspaceTargetPinned(workspace, target, false, env);
+    syncWorkspaceProjectAfterChange(workspace, env);
     sendJson(response, {
       ...scanInstalledWorkspace(workspace),
       removal: { removed: removal.removed, target },
@@ -330,6 +342,7 @@ async function routeInstalledApi(
           );
         },
       });
+      syncWorkspaceProjectAfterChange(workspace, env);
       emit({
         type: 'result',
         ...scanInstalledWorkspace(workspace),

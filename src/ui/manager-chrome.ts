@@ -108,8 +108,8 @@ export function renderInitializationDialog(): string {
   return `<dialog id="initializationDialog">
     <form class="init-form" id="initializationForm">
       <h2>初始化 skillctl</h2>
-      <p class="subtitle">关联 Skill 源目录和缓存目录。源目录缺少配置表时会自动创建。</p>
-      <label><span>Skill 源目录（绝对路径）</span><span class="path-input"><input name="sourceDir" placeholder="/Users/name/skill-catalog" required><button type="button" class="ghost" data-pick-kind="source">选择目录</button></span></label>
+      <p class="subtitle">关联 Skill 源与缓存目录。源可为本地绝对路径或 git 远程地址；缺少配置表时会自动创建。</p>
+      <label><span>Skill 源（绝对路径或 git 地址）</span><span class="path-input"><input name="sourceDir" placeholder="/Users/name/skill-catalog 或 https://github.com/owner/repo.git" required><button type="button" class="ghost" data-pick-kind="source">选择目录</button></span></label>
       <label><span>缓存目录（绝对路径）</span><span class="path-input"><input name="cacheDir" placeholder="/Users/name/.cache/skillctl" required><button type="button" class="ghost" data-pick-kind="cache">选择目录</button></span></label>
       <div class="notice" id="initializationNotice"></div>
       <p class="config-path" id="configPath"></p>
@@ -131,14 +131,14 @@ async function setupInitialization(onInitialized){
   const save=document.querySelector('#saveInitialization');
   const configPath=document.querySelector('#configPath');
   const initializationNotice=document.querySelector('#initializationNotice');
-  let status={initialized:false,sourceDir:'',cacheDir:'',configPath:''};
+  let status={initialized:false,sourceDir:'',sourceRemote:'',cacheDir:'',configPath:''};
   let isPickingDirectory=false;
 
   function applyStatus(next){
     status=next;
-    form.elements.sourceDir.value=next.sourceDir||'';
+    form.elements.sourceDir.value=next.sourceRemote||next.sourceDir||'';
     form.elements.cacheDir.value=next.cacheDir||'';
-    configPath.textContent='配置文件：'+(next.configPath||'');
+    configPath.textContent='配置文件：'+(next.configPath||'')+(next.sourceRemote&&next.sourceDir?'\\n本地源：'+next.sourceDir:'');
     cancel.hidden=!next.initialized;
   }
   function openDialog(){

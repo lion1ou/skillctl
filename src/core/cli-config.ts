@@ -4,7 +4,9 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from './brand.js';
 import type { CategoryRecord, SkillRecord } from './skill-registry.js';
+import { ensureGitSourceCheckout, isGitRemoteSource, toSshGitRemote } from './source-git.js';
 import { getTarget, type TargetId } from './targets.js';
+import { refreshWorkspaceProjectFile } from './workspace-project.js';
 
 export interface ManagedWorkspaceConfig {
   path: string;
@@ -15,6 +17,7 @@ export interface CliConfig {
   version: 1;
   sourceDir: string;
   cacheDir: string;
+  sourceRemote?: string;
   workspaces: ManagedWorkspaceConfig[];
 }
 
@@ -55,33 +58,22 @@ export function peekCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig |
   if (!existsSync(file)) return null;
   const config = JSON.parse(readFileSync(file, 'utf8')) as Partial<CliConfig>;
   if (config.version !== 1 || !config.sourceDir) return null;
-  return {
-    version: 1,
-    sourceDir: resolve(config.sourceDir),
-    cacheDir: resolve(config.cacheDir ?? resolveSkillCacheDir()),
-    workspaces: normalizeWorkspaces(config.workspaces, env),
-  };
+  return normalizeLoadedConfig(config, env);
 }
 
 /** 读取首次初始化保存的 skill 源目录和缓存目录。 */
 export function loadCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig {
   const file = resolveCliConfigPath(env);
   if (!existsSync(file)) {
-    throw new Error(`CLI 尚未初始化，请先运行 ${CLI_NAME} init --source <绝对路径>`);
+    throw new Error(`CLI 尚未初始化，请先运行 ${CLI_NAME} init --source <绝对路径或 git 地址>`);
   }
   const config = JSON.parse(readFileSync(file, 'utf8')) as Partial<CliConfig>;
   if (config.version !== 1 || !config.sourceDir) {
     throw new Error(`无效的 skillctl 配置：${file}`);
   }
-  const sourceDir = resolve(config.sourceDir);
-  const cacheDir = resolve(config.cacheDir ?? resolveSkillCacheDir());
-  validateSourceDir(sourceDir);
-  return {
-    version: 1,
-    sourceDir,
-    cacheDir,
-    workspaces: normalizeWorkspaces(config.workspaces, env),
-  };
+  const loaded = normalizeLoadedConfig(config, env);
+  validateSourceDir(loaded.sourceDir);
+  return loaded;
 }
 
 /** 校验并写入 CLI 与 skill 源、缓存目录之间的关联配置。 */
@@ -91,7 +83,9 @@ export function initializeCliConfig(options: {
   env?: NodeJS.ProcessEnv;
   force?: boolean;
 }): CliConfig {
-  const sourceDir = resolveRequiredAbsolutePath(options.sourceDir, '源目录');
+  const env = options.env ?? process.env;
+  const resolvedSource = resolveSourceInput(options.sourceDir, env);
+  const sourceDir = resolvedSource.sourceDir;
   const cacheDir = resolveRequiredAbsolutePath(
     options.cacheDir ?? resolveSkillCacheDir(),
     '缓存目录',
@@ -99,7 +93,7 @@ export function initializeCliConfig(options: {
   ensureSourceCatalog(sourceDir);
   validateSourceDir(sourceDir);
   mkdirSync(cacheDir, { recursive: true });
-  const file = resolveCliConfigPath(options.env);
+  const file = resolveCliConfigPath(env);
   if (existsSync(file) && !options.force) {
     throw new Error(`配置已存在：${file}；如需覆盖请使用 --force`);
   }
@@ -107,11 +101,42 @@ export function initializeCliConfig(options: {
     version: 1,
     sourceDir,
     cacheDir,
-    workspaces: normalizeWorkspaces(undefined, options.env ?? process.env),
+    workspaces: normalizeWorkspaces(undefined, env),
+    ...(resolvedSource.sourceRemote ? { sourceRemote: resolvedSource.sourceRemote } : {}),
   };
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   return config;
+}
+
+/** 源输入可为绝对路径或 git 远程地址；远程地址会 clone 到配置目录。 */
+export function resolveSourceInput(
+  value: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { sourceDir: string; sourceRemote?: string } {
+  const trimmed = value.trim();
+  if (isGitRemoteSource(trimmed)) {
+    const remote = toSshGitRemote(trimmed);
+    const checkout = ensureGitSourceCheckout(remote, { env });
+    return { sourceDir: checkout.localPath, sourceRemote: toSshGitRemote(checkout.remote) };
+  }
+  return { sourceDir: resolveRequiredAbsolutePath(trimmed, '源目录') };
+}
+
+function normalizeLoadedConfig(
+  config: Partial<CliConfig>,
+  env: NodeJS.ProcessEnv,
+): CliConfig {
+  const loaded: CliConfig = {
+    version: 1,
+    sourceDir: resolve(config.sourceDir as string),
+    cacheDir: resolve(config.cacheDir ?? resolveSkillCacheDir()),
+    workspaces: normalizeWorkspaces(config.workspaces, env),
+  };
+  if (typeof config.sourceRemote === 'string' && config.sourceRemote.trim()) {
+    loaded.sourceRemote = toSshGitRemote(config.sourceRemote);
+  }
+  return loaded;
 }
 
 /** 添加一个可管理的 Workspace，重复路径保持原配置不变。 */
@@ -159,10 +184,18 @@ export function setWorkspaceTargetPinned(
   const workspace = config.workspaces.find((item) => item.path === path);
   if (!workspace) throw new Error(`未管理该 Workspace：${path}`);
   const pinned = new Set(workspace.pinnedTargetIds);
-  if (isPinned) pinned.add(target.id);
-  else pinned.delete(target.id);
+  if (isPinned) {
+    pinned.add(target.id);
+    mkdirSync(join(path, target.skillsDir), { recursive: true });
+  } else {
+    pinned.delete(target.id);
+  }
   workspace.pinnedTargetIds = [...pinned].sort();
   writeCliConfig(config, env);
+  refreshWorkspaceProjectFile(path, {
+    pinnedTargetIds: workspace.pinnedTargetIds,
+    sourceRemote: config.sourceRemote,
+  });
   return config;
 }
 

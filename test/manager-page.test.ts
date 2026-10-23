@@ -310,8 +310,11 @@ test('路径输入框通过目录选择器填入，不直接提交', () => {
   assert.match(MANAGER_PAGE, /data-pick-kind="cache"/);
   assert.match(MANAGER_PAGE, /data-pick-kind="restore"/);
   assert.match(MANAGER_PAGE, /\/api\/directories\/pick/);
+  assert.match(MANAGER_PAGE, /Skill 源（绝对路径或 git 地址）/);
+  assert.match(MANAGER_PAGE, /sourceRemote\|\|next\.sourceDir/);
   assert.match(CATALOG_PAGE, /data-pick-kind="source"/);
   assert.match(CATALOG_PAGE, /data-pick-kind="cache"/);
+  assert.match(CATALOG_PAGE, /Skill 源（绝对路径或 git 地址）/);
 });
 
 test('安装管理列表允许单独删除健康、禁用和损坏的 Skill', () => {

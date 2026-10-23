@@ -11,7 +11,10 @@
 
 ## 安装
 
+默认从私有源安装（需先配置 scope）：
+
 ```bash
+npm config set @lion1ou:registry https://npm.n.lion1ou.tech:16666/
 npm install -g @lion1ou/skill-ctl
 ```
 
@@ -20,6 +23,8 @@ npm install -g @lion1ou/skill-ctl
 ```bash
 npx @lion1ou/skill-ctl
 ```
+
+Skill 源目录（如 `lion1ou-skills`）不随本包分发，请用绝对路径或 git 地址初始化：`skill-ctl init --source <path-or-git-url>`。统一说明见同级 [`../PRIVATE-NPM.md`](../PRIVATE-NPM.md)。
 
 本地开发：
 
@@ -33,10 +38,11 @@ npm link
 
 ## 初始化
 
-路径必须是绝对路径。交互式 init 先问源目录，再问缓存目录。本机配置已存在时，可选择保留或覆盖。
+Skill 源可为本地绝对路径，或 git 远程地址（`https://` / `git@` / `ssh://`）。填写远程地址时，会 clone 到 `~/.config/skillctl/sources/<owner>/<repo>`，并在配置中记录 `sourceRemote`。交互式 init 先问源，再问缓存目录。本机配置已存在时，可选择保留或覆盖。
 
 ```bash
 skill-ctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
+skill-ctl init --source https://github.com/owner/skill-catalog.git
 ```
 
 - 非交互环境必须提供 `--source`。
@@ -91,7 +97,8 @@ skill-ctl manage --port 4173 --no-open
 
 **安装管理 `/`**
 
-- 默认扫描用户根目录，也可通过系统目录选择器填入绝对路径后新增项目 Workspace。路径配置里的源目录和缓存目录同样可选择目录后填入，不会在选择时直接保存。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。批量新增 Agent 只会固定展示，不会预先创建目录。
+- 默认扫描用户根目录，也可通过系统目录选择器填入绝对路径后新增项目 Workspace。路径配置里的源（绝对路径或 git 地址）和缓存目录同样可选择本地目录后填入，不会在选择时直接保存。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。新增/固定 Agent 时，若对应 skills 目录不存在会自动创建。
+- 安装或变更后会在 Workspace 根写入可提交的 `.skillctl/workspace.json`（含 SSH 源地址、固定 Agent、已装 Skill）。再次添加该目录时会按文件恢复 pin，并自动补装缺失 Skill；若本机尚未 init 且当前目录有该文件，可用其中的 `sourceRemote` 完成源配置。
 - 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent。卡片上的启用/禁用会把 `SKILL.md` 与 `SKILL.md.disable` 互相改名。
 - 点击 Skill 卡片进入详情，读取该 Workspace/Agent 下已落地的 `SKILL.md`（禁用为 `SKILL.md.disable`）。YAML frontmatter 与 Markdown 正文分开展示。点击启用/禁用不会进入详情。
 - 删除 Workspace 只从管理列表移除，不删除项目文件；用户根目录不可删除。
@@ -185,9 +192,9 @@ pnpm lint
 
 发布到 npm 的包只包含 `bin/` 和编译后的 `dist/`，不会打包 catalog 源文件。
 
-版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后如需自行发布 `@lion1ou/skill-ctl@1.2.0`：
+版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后发布到私有源：
 
 ```bash
 pnpm test
-npm publish --access public
+pnpm run publish:npm
 ```

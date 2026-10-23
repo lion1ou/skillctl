@@ -22,7 +22,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "registry": "https://registry.npmjs.org/"
+    "registry": "https://npm.n.lion1ou.tech:16666/"
   },
   "files": [
     "bin/run.js",
@@ -43,7 +43,7 @@
     "lint": "eslint src test --ext .ts",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm test",
-    "publish:npm": "npm publish --access public"
+    "publish:npm": "npm publish --registry https://npm.n.lion1ou.tech:16666/"
   },
   "engines": {
     "node": ">=18.17"

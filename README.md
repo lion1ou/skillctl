@@ -11,7 +11,10 @@ Configuration-driven installer for Agent Skills. `skill-ctl` does not ship a cat
 
 ## Install
 
+Install from the private registry (configure the scope first):
+
 ```bash
+npm config set @lion1ou:registry https://npm.n.lion1ou.tech:16666/
 npm install -g @lion1ou/skill-ctl
 ```
 
@@ -20,6 +23,8 @@ Global install provides the `skill-ctl` command. You can also run it without ins
 ```bash
 npx @lion1ou/skill-ctl
 ```
+
+The skill catalog (e.g. `lion1ou-skills`) is not bundled. Point init at a local path or git URL: `skill-ctl init --source <path-or-git-url>`. See [`../PRIVATE-NPM.md`](../PRIVATE-NPM.md).
 
 For local development:
 
@@ -33,10 +38,11 @@ npm link
 
 ## Initialize
 
-Paths must be absolute. Interactive init asks for the source directory first, then the cache directory. If a local config already exists, you can keep it or overwrite it.
+The skill source may be a local absolute path or a git remote (`https://`, `git@`, `ssh://`). A remote is cloned to `~/.config/skillctl/sources/<owner>/<repo>`, and `sourceRemote` is stored in the config. Interactive init asks for the source first, then the cache directory. If a local config already exists, you can keep it or overwrite it.
 
 ```bash
 skill-ctl init --source /absolute/path/to/catalog --cache /absolute/path/to/cache
+skill-ctl init --source https://github.com/owner/skill-catalog.git
 ```
 
 - `--source` is required in non-interactive mode.
@@ -91,7 +97,8 @@ skill-ctl manage --port 4173 --no-open
 
 **Installed skills `/`**
 
-- Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. The source and cache fields in path settings use the same picker and are not saved until you confirm. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Batch-adding Agents only pins them for display; it does not pre-create directories.
+- Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. The source field accepts an absolute path or git URL; the cache field and directory pickers still use local paths and are not saved until you confirm. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Adding or pinning an Agent creates its skills directory when missing.
+- Installs and management changes write a commit-friendly `.skillctl/workspace.json` under the Workspace root (SSH `sourceRemote`, pinned Agents, installed skills). Re-adding that directory restores pins and auto-installs missing skills. If the CLI is not initialized yet and the current directory has this file, its `sourceRemote` can complete source setup.
 - The top-right Install button opens a category dialog and installs into the current Agent under the current Workspace. The enable/disable control on a card renames `SKILL.md` ↔ `SKILL.md.disable`.
 - Click a Skill card to open its detail page, which reads the landed `SKILL.md` in that Workspace/Agent (`SKILL.md.disable` when disabled). YAML frontmatter and Markdown body are shown separately. The enable/disable control does not open detail.
 - Removing a Workspace only removes the management entry; it never deletes project files. The user home Workspace cannot be removed.
@@ -190,5 +197,5 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish `@lion1ou/skill-ct
 
 ```bash
 pnpm test
-npm publish --access public
+pnpm run publish:npm
 ```

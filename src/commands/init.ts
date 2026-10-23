@@ -8,6 +8,7 @@ import {
   resolveSkillCacheDir,
   type CliConfig,
 } from '../core/cli-config.js';
+import { isGitRemoteSource } from '../core/source-git.js';
 import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from '../core/brand.js';
 
 export default class Init extends Command {
@@ -15,7 +16,7 @@ export default class Init extends Command {
   static override flags = {
     source: Flags.string({
       char: 's',
-      description: 'skill 源目录，必须使用绝对路径；缺少配置表时生成带远程示例的 skillctl-skills.json 与 skillctl-categories.json',
+      description: 'skill 源：绝对路径或 git 远程地址；缺少配置表时生成带远程示例的 skillctl-skills.json 与 skillctl-categories.json',
     }),
     cache: Flags.string({
       description: '外部 skill 缓存目录，必须使用绝对路径；未指定时使用脚本目录 .cache',
@@ -37,14 +38,12 @@ export default class Init extends Command {
       }
     }
     if (!flags.source && !process.stdin.isTTY) {
-      this.error(`未配置 skill 源目录，请先运行 ${CLI_NAME} init --source <绝对路径>`);
+      this.error(`未配置 skill 源目录，请先运行 ${CLI_NAME} init --source <绝对路径或 git 地址>`);
     }
     const sourceDir = flags.source
-      ? resolveRequiredAbsolutePath(flags.source, '源目录')
-      : await promptAbsoluteDir(
-        'skill 源目录（必须使用绝对路径）',
-        '/Users/name/skill-catalog',
-        existing?.sourceDir,
+      ? flags.source.trim()
+      : await promptSourceInput(
+        existing?.sourceRemote ?? existing?.sourceDir,
       );
     const cacheDir = flags.cache
       ? resolveRequiredAbsolutePath(flags.cache, '缓存目录')
@@ -83,9 +82,31 @@ async function promptKeepOrOverwrite(existing: CliConfig): Promise<boolean> {
 function logCliConfig(log: (message: string) => void, config: CliConfig): void {
   log(`本机配置：${resolveCliConfigPath()}`);
   log(`skill 源：${config.sourceDir}`);
+  if (config.sourceRemote) log(`远程源：${config.sourceRemote}`);
   log(`缓存目录：${config.cacheDir}`);
   log(`注册表：${config.sourceDir}/${SKILLS_FILE}`);
   log(`分类表：${config.sourceDir}/${CATEGORIES_FILE}`);
+}
+
+/** 交互收集 skill 源：绝对路径或 git 远程地址。 */
+async function promptSourceInput(initialValue?: string): Promise<string> {
+  const value = await p.text({
+    message: 'skill 源（绝对路径或 git 远程地址）',
+    placeholder: '/Users/name/skill-catalog 或 https://github.com/owner/repo.git',
+    initialValue,
+    validate: (input) => {
+      if (!input?.trim()) return '不能为空，请填写绝对路径或 git 地址';
+      if (isGitRemoteSource(input)) return undefined;
+      try {
+        resolveRequiredAbsolutePath(input, '源目录');
+        return undefined;
+      } catch (error) {
+        return error instanceof Error ? error.message : '请使用绝对路径或 git 地址';
+      }
+    },
+  });
+  if (p.isCancel(value)) throw new Error('已取消');
+  return (value as string).trim();
 }
 
 /** 交互收集必须为绝对路径的目录。 */
