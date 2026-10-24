@@ -6,7 +6,7 @@ import {
   isDirectoryLink,
   isSameLinkTarget,
   linkDirectory,
-  resolveNpxExecutable,
+  resolveNpxSpawn,
 } from '../src/core/fs-link.js';
 import {
   defaultInstallMode,
@@ -15,9 +15,18 @@ import {
 } from '../src/core/installer.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
 
-test('resolveNpxExecutable 在 Windows 使用 npx.cmd，其他平台使用 npx', () => {
-  const expected = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  assert.equal(resolveNpxExecutable(), expected);
+test('resolveNpxSpawn：Windows 使用 npx.cmd 且 shell:true，其他平台直接 npx', () => {
+  const args = ['-y', 'skills', 'add', 'owner/repo'];
+  const win = resolveNpxSpawn(args, 'win32');
+  assert.equal(win.command, 'npx.cmd');
+  assert.deepEqual(win.args, args);
+  assert.equal(win.options.shell, true);
+  assert.equal(win.options.windowsHide, true);
+
+  const unix = resolveNpxSpawn(args, 'darwin');
+  assert.equal(unix.command, 'npx');
+  assert.deepEqual(unix.args, args);
+  assert.equal(unix.options.shell, undefined);
 });
 
 test('Windows 不支持软链安装，resolveInstallMode 始终为 copy', () => {

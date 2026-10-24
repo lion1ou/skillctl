@@ -1,12 +1,31 @@
+import type { SpawnOptions } from 'node:child_process';
 import { lstatSync, readlinkSync, symlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+export interface NpxSpawnSpec {
+  command: string;
+  args: string[];
+  options: SpawnOptions;
+}
+
 /**
- * Windows 上 libuv 只自动补 `.exe`，认不出 `npx.cmd`。
- * 见 https://github.com/nodejs/node/issues/3675
+ * 解析调用 npx 的 spawn 参数。
+ * - Windows：必须用 `npx.cmd` + `shell: true`。仅补 `.cmd` 在 Node 18.20+/22 会 EINVAL
+ *   （CVE-2024-27980：禁止无 shell 直接 spawn `.cmd`/`.bat`）。
+ * - 其他平台：直接 `npx`。
  */
-export function resolveNpxExecutable(): string {
-  return process.platform === 'win32' ? 'npx.cmd' : 'npx';
+export function resolveNpxSpawn(
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+): NpxSpawnSpec {
+  if (platform === 'win32') {
+    return {
+      command: 'npx.cmd',
+      args,
+      options: { shell: true, windowsHide: true },
+    };
+  }
+  return { command: 'npx', args, options: {} };
 }
 
 /**

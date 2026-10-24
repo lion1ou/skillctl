@@ -1,10 +1,16 @@
 # Changelog
 
+## 1.2.7 — 2026-10-24
+
+### Fixed
+
+- Windows 外部 Skill 准备改为 `npx.cmd` + `shell: true`（Node 18.20+/22 禁止无 shell 直接 spawn `.cmd`，仅改文件名仍会 EINVAL）。
+
 ## 1.2.6 — 2026-10-24
 
 ### Fixed
 
-- Windows 外部 Skill 准备改用 `npx.cmd`，避免 libuv 找不到 `npx`。
+- Windows 外部 Skill 准备改用 `npx.cmd`（1.2.7 起改为同时启用 `shell: true`）。
 - Windows 仅支持 `copy` 安装；软链选项在 CLI 与管理页不可用，配置中的 symlink 也会按 copy 落地。
 - 非 Windows 目录软链显式使用 `type: 'dir'`，并识别 junction，避免删除误伤源目录。
 

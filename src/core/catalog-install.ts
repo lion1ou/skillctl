@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MANIFEST_FILE } from './brand.js';
-import { resolveNpxExecutable } from './fs-link.js';
+import { resolveNpxSpawn } from './fs-link.js';
 import { readInstallRecord, writeInstallRecord } from './install-record.js';
 import {
   installItem,
@@ -93,14 +93,14 @@ export function spawnExternalSkillAdd(
   onLog?: (line: string) => void,
 ): Promise<void> {
   mkdirSync(cachePackageDir, { recursive: true });
-  const npx = resolveNpxExecutable();
   const args = ['-y', 'skills', 'add', packageId, '--skill', ...skillNames, '--agent', 'universal', '--copy', '-y'];
-  onLog?.(`$ ${npx} ${args.join(' ')}`);
+  const npx = resolveNpxSpawn(args);
+  onLog?.(`$ ${npx.command} ${npx.args.join(' ')}`);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(npx, args, {
+    const child = spawn(npx.command, npx.args, {
+      ...npx.options,
       cwd: cachePackageDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
     });
     let stdout = '';
     let stderr = '';

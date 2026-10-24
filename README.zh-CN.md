@@ -83,7 +83,7 @@ skill-ctl manage
 1. 选择范围（当前目录或 `~`）、模式（软链或复制）、target 和 skill。**Windows 仅支持 `copy`**（CLI/管理页不提供软链选项；配置里若写了 symlink 也会按 copy 安装）。其他平台默认 `symlink`。
 2. 交互选择按分类分组，子 skill 缩进展示；选中分类即选中该分类下全部 skill。
 3. 注册表里已删除的 skill 会从分类表中移除并提示，不报错。
-4. 缺失的外部 skill 会带进度动画缓存（Windows 下通过 `npx.cmd` 调用），再软链或复制到各个 target。
+4. 缺失的外部 skill 会带进度动画缓存（Windows 下以 `npx.cmd` + `shell: true` 调用，避免 Node 18.20+/22 直接 spawn `.cmd` 报 EINVAL），再软链或复制到各个 target。
 5. 配置表中 `enabled` 为 `false` 的 skill 安装时直接跳过，并在安装结果中列出。缺省视为启用。
 
 ### manage
