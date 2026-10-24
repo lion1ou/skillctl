@@ -1,9 +1,11 @@
+import { VERSION as PACKAGE_VERSION } from '../core/package-meta.js';
+
 export const MANAGER_STYLES = `
     :root{color-scheme:light;--bg:#F7F6F3;--panel:#FFFFFF;--line:#EAEAEA;--text:#2F3437;--muted:#787774;--green:#346538;--red:#9F2F2D;--blue:#1F6C9F}
     *{box-sizing:border-box}html,body{min-height:100%}body{min-height:100dvh;margin:0;background:var(--bg);color:var(--text);font:14px/1.6 "SF Pro Display","Geist Sans","Helvetica Neue",Arial,sans-serif}
     main{width:min(1240px,calc(100% - 40px));height:100dvh;margin:0 auto;padding:20px 0 24px;display:flex;flex-direction:column}
     .topbar{display:flex;align-items:center;justify-content:space-between;min-height:48px;border-bottom:1px solid var(--line)}
-    .brand{display:flex;align-items:center;gap:9px;color:#111;text-decoration:none;font:600 21px/1 "Newsreader","Instrument Serif","Times New Roman",serif;letter-spacing:-.025em}.brand img{width:24px;height:24px;border-radius:6px}
+    .brand{display:flex;align-items:center;gap:9px;color:#111;text-decoration:none;font:600 21px/1 "Newsreader","Instrument Serif","Times New Roman",serif;letter-spacing:-.025em}.brand img{width:24px;height:24px;border-radius:6px}.brand-version{margin-left:2px;color:var(--muted);font:500 12px/1 "SF Pro Text","Geist Sans","Helvetica Neue",Arial,sans-serif;letter-spacing:0}
     .nav-links{display:flex;align-items:center;gap:22px;height:48px}.nav-links a{position:relative;color:var(--muted);text-decoration:none;font-weight:500;transition:color .2s ease}
     .nav-links a::after{content:"";position:absolute;right:0;bottom:-14px;left:0;height:2px;background:#111;opacity:0;transform:scaleX(.65);transition:opacity .2s ease,transform .2s ease}
     .nav-links a:hover,.nav-links a.active{color:#111}.nav-links a.active::after{opacity:1;transform:scaleX(1)}
@@ -97,10 +99,18 @@ export const MANAGER_STYLES = `
 `;
 
 /** 区分已安装 Skill 页和配置表页的主导航。 */
-export function renderManagerNav(active: 'installed' | 'catalog'): string {
+export function renderManagerNav(active: 'installed' | 'catalog', version = PACKAGE_VERSION): string {
   const installed = active === 'installed' ? ' active' : '';
   const catalog = active === 'catalog' ? ' active' : '';
-  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl</a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 目录</a><button type="button" class="config-entry" id="initConfigButton">路径配置</button></div></nav>`;
+  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl<span class="brand-version">v${escapeHtml(version)}</span></a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 目录</a><button type="button" class="config-entry" id="initConfigButton">路径配置</button></div></nav>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /** 两个管理页面共用的初始化配置弹窗。 */

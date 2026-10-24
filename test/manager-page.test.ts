@@ -52,7 +52,7 @@ test('安装管理页把新增与安装操作放在各自上下文中', () => {
 test('标题栏组合品牌与安装、目录导航', () => {
   for (const page of [MANAGER_PAGE, CATALOG_PAGE]) {
     assert.match(page, /<nav class="topbar"/);
-    assert.match(page, /class="brand"[^>]*>[\s\S]*skill-ctl<\/a>/);
+    assert.match(page, /class="brand"[^>]*>[\s\S]*skill-ctl<span class="brand-version">v\d+\.\d+\.\d+<\/span><\/a>/);
     assert.match(page, />安装管理<\/a>/);
     assert.match(page, />Skill 目录<\/a>/);
     assert.doesNotMatch(page, /class="app-header"/);

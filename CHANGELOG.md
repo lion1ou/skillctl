@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.4 — 2026-10-24
+
+### Added
+
+- 管理页顶栏展示当前包版本（从 `package.json` 读取）。
+- 支持 git/SSH Skill 源、`.skillctl/workspace.json` 项目配置，以及接入时自动补装缺失 Skill。
+
 ## 1.2.2 — 2026-09-23
 
 ### Added
