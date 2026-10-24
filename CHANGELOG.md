@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.5 — 2026-10-24
+
+### Changed
+
+- 管理页「Skill 目录」更名为「Skill 源」；路径配置入口移至该页页头。
+- 删除 Agent 时移除完整 Agent 目录（如 `.cursor`），不再只删 skills 子目录。
+
 ## 1.2.4 — 2026-10-24
 
 ### Added

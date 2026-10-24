@@ -246,29 +246,47 @@ export function restoreBrokenSkillSymlink(input: {
   return scanInstalledWorkspace(workspaceRoot);
 }
 
-/** 删除白名单 Agent 的 skills 根目录；根目录为软链时仅移除链接本身。 */
+/** 删除白名单 Agent 的完整目录（skills 的父目录）；目录为软链时仅移除链接本身。 */
 export function removeManagedAgentSkills(input: {
   workspaceRoot?: string;
   target: TargetId;
-}): { removed: boolean; skillsPath: string } {
+}): { removed: boolean; skillsPath: string; agentPath: string } {
   const workspaceRoot = resolve(input.workspaceRoot ?? homedir());
-  const skillsPath = resolve(workspaceRoot, getTarget(input.target).skillsDir);
-  if (skillsPath === workspaceRoot || !skillsPath.startsWith(`${workspaceRoot}${sep}`)) {
-    throw new Error('Agent skills 路径超出 Workspace');
+  const skillsRel = getTarget(input.target).skillsDir;
+  const skillsPath = resolve(workspaceRoot, skillsRel);
+  const agentRel = dirname(skillsRel);
+  const agentPath = agentRel === '.' ? skillsPath : resolve(workspaceRoot, agentRel);
+  if (
+    agentPath === workspaceRoot
+    || !agentPath.startsWith(`${workspaceRoot}${sep}`)
+    || skillsPath === workspaceRoot
+    || !skillsPath.startsWith(`${workspaceRoot}${sep}`)
+  ) {
+    throw new Error('Agent 路径超出 Workspace');
   }
   let pathState: ReturnType<typeof lstatSync>;
   try {
-    pathState = lstatSync(skillsPath);
+    pathState = lstatSync(agentPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { removed: false, skillsPath };
-    throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    try {
+      pathState = lstatSync(skillsPath);
+    } catch (skillsError) {
+      if ((skillsError as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { removed: false, skillsPath, agentPath };
+      }
+      throw skillsError;
+    }
+    if (pathState.isSymbolicLink()) unlinkSync(skillsPath);
+    else rmSync(skillsPath, { recursive: true });
+    return { removed: true, skillsPath, agentPath };
   }
   if (pathState.isSymbolicLink()) {
-    unlinkSync(skillsPath);
+    unlinkSync(agentPath);
   } else {
-    rmSync(skillsPath, { recursive: true });
+    rmSync(agentPath, { recursive: true });
   }
-  return { removed: true, skillsPath };
+  return { removed: true, skillsPath, agentPath };
 }
 
 /** 读取已落地 Skill 的 SKILL.md；软链只读目标文件，不允许文件路径逃出 Skill 目录。 */

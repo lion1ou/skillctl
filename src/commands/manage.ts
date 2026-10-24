@@ -24,7 +24,7 @@ export default class Manage extends Command {
     const { flags } = await this.parse(Manage);
     const manager = await startManagerServer({ port: flags.port });
     this.log(`已安装 Skill：${manager.url}`);
-    this.log(`配置表：${manager.url}/catalog`);
+    this.log(`Skill 源：${manager.url}/catalog`);
     this.log('按 Ctrl+C 停止服务');
     if (flags.open) openBrowser(manager.url);
     await new Promise<void>((resolvePromise) => {

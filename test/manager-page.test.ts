@@ -49,17 +49,19 @@ test('安装管理页把新增与安装操作放在各自上下文中', () => {
   assert.doesNotMatch(MANAGER_PAGE, /id="installPanel"/);
 });
 
-test('标题栏组合品牌与安装、目录导航', () => {
+test('标题栏组合品牌与安装、源导航', () => {
   for (const page of [MANAGER_PAGE, CATALOG_PAGE]) {
     assert.match(page, /<nav class="topbar"/);
     assert.match(page, /class="brand"[^>]*>[\s\S]*skill-ctl<span class="brand-version">v\d+\.\d+\.\d+<\/span><\/a>/);
     assert.match(page, />安装管理<\/a>/);
-    assert.match(page, />Skill 目录<\/a>/);
+    assert.match(page, />Skill 源<\/a>/);
     assert.doesNotMatch(page, /class="app-header"/);
     assert.doesNotMatch(page, /class="tabs"/);
   }
   assert.match(MANAGER_PAGE, /管理 Workspace、Agent 目录与已安装 Skill/);
   assert.match(CATALOG_PAGE, /维护 Skill 来源、分类与安装策略/);
+  assert.match(CATALOG_PAGE, /id="initConfigButton">路径配置<\/button>/);
+  assert.doesNotMatch(MANAGER_PAGE, /id="initConfigButton"/);
 });
 
 test('管理页使用全高弹性布局与暖白极简视觉', () => {
@@ -132,12 +134,12 @@ test('安装管理页展示扫描到的 Agent，并合并已固定但未落地�
   assert.equal(agents.find((agent) => agent.id === 'cursor')?.detected, true);
 });
 
-test('安装页和 Skill 目录页提供删除确认弹窗', () => {
+test('安装页和 Skill 源页提供删除确认弹窗', () => {
   assert.match(MANAGER_PAGE, /<dialog id="confirmDialog"/);
   assert.match(CATALOG_PAGE, /<dialog id="confirmDialog"/);
 });
 
-test('Skill 目录卡片只保留一个安装策略控件并通过弹窗新增分类', () => {
+test('Skill 源卡片只保留一个安装策略控件并通过弹窗新增分类', () => {
   assert.doesNotMatch(CATALOG_PAGE, /安装启用/);
   assert.doesNotMatch(CATALOG_PAGE, /安装跳过/);
   assert.match(CATALOG_PAGE, /class="strategy-toggle/);

@@ -9,12 +9,13 @@ export const MANAGER_STYLES = `
     .nav-links{display:flex;align-items:center;gap:22px;height:48px}.nav-links a{position:relative;color:var(--muted);text-decoration:none;font-weight:500;transition:color .2s ease}
     .nav-links a::after{content:"";position:absolute;right:0;bottom:-14px;left:0;height:2px;background:#111;opacity:0;transform:scaleX(.65);transition:opacity .2s ease,transform .2s ease}
     .nav-links a:hover,.nav-links a.active{color:#111}.nav-links a.active::after{opacity:1;transform:scaleX(1)}
-    .nav-links .config-entry{height:30px;padding:0 12px;border-radius:6px;border:1px solid #DEDEDB;background:#FFFFFF;color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
-    .nav-links .config-entry:hover{background:#F1F1EF}
     .page-header{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:20px}
     .page-title{font:500 28px/1.1 "Newsreader","Instrument Serif","Times New Roman",serif;letter-spacing:-.03em;margin:22px 0 5px}.subtitle{color:var(--muted);margin:0;max-width:680px;text-wrap:pretty}
     .summary{color:var(--muted)}.summary strong{color:var(--text)}
+    .page-header-actions{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
     .page-header .summary{text-align:right}
+    .page-header .config-entry,.nav-links .config-entry{height:30px;padding:0 12px;border-radius:6px;border:1px solid #DEDEDB;background:#FFFFFF;color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+    .page-header .config-entry:hover,.nav-links .config-entry:hover{background:#F1F1EF}
     .workspace-bar{display:flex;align-items:center;gap:8px;margin-bottom:14px;overflow:visible}.workspace-actions{display:flex;gap:8px;flex:none;margin-left:auto}
     .workspace-tabs{display:flex;flex-wrap:wrap;gap:10px;flex:1;min-width:0;padding:8px 8px 0 0;overflow:visible}
     .workspace-tab-wrap{position:relative;display:flex;overflow:visible}
@@ -102,7 +103,7 @@ export const MANAGER_STYLES = `
 export function renderManagerNav(active: 'installed' | 'catalog', version = PACKAGE_VERSION): string {
   const installed = active === 'installed' ? ' active' : '';
   const catalog = active === 'catalog' ? ' active' : '';
-  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl<span class="brand-version">v${escapeHtml(version)}</span></a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 目录</a><button type="button" class="config-entry" id="initConfigButton">路径配置</button></div></nav>`;
+  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl<span class="brand-version">v${escapeHtml(version)}</span></a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 源</a></div></nav>`;
 }
 
 function escapeHtml(value: string): string {
@@ -178,7 +179,7 @@ async function setupInitialization(onInitialized){
       button.disabled=false;
     }
   });
-  entry.addEventListener('click',openDialog);
+  if(entry)entry.addEventListener('click',openDialog);
   cancel.addEventListener('click',()=>dialog.close());
   dialog.addEventListener('cancel',(event)=>{
     if(!status.initialized)event.preventDefault();

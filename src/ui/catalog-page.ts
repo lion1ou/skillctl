@@ -115,7 +115,7 @@ export const CATALOG_PAGE = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="icon" href="/favicon.ico">
-  <title>skill-ctl · Skill 目录</title>
+  <title>skill-ctl · Skill 源</title>
   <style>${MANAGER_STYLES}</style>
 </head>
 <body>
@@ -123,10 +123,13 @@ export const CATALOG_PAGE = `<!doctype html>
   ${renderManagerNav('catalog')}
   <header class="page-header">
     <div>
-      <h1 class="page-title">Skill 目录</h1>
+      <h1 class="page-title">Skill 源</h1>
       <p class="subtitle">维护 Skill 来源、分类与安装策略，决定安装时可选择的内容。</p>
     </div>
-    <div class="summary" id="summary">正在读取配置表…</div>
+    <div class="page-header-actions">
+      <button type="button" class="config-entry" id="initConfigButton">路径配置</button>
+      <div class="summary" id="summary">正在读取配置表…</div>
+    </div>
   </header>
   <div class="notice" id="notice"></div>
   <section class="sync panel" id="syncPanel" hidden>

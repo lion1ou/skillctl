@@ -88,7 +88,7 @@ skill-ctl manage
 
 ### manage
 
-`manage` starts a local dashboard on `127.0.0.1`. The top bar switches between Installed skills and Catalog.
+`manage` starts a local dashboard on `127.0.0.1`. The top bar switches between Installed skills and Skill Source.
 
 ```bash
 skill-ctl manage
@@ -97,21 +97,22 @@ skill-ctl manage --port 4173 --no-open
 
 **Installed skills `/`**
 
-- Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. The source field accepts an absolute path or git URL; the cache field and directory pickers still use local paths and are not saved until you confirm. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Adding or pinning an Agent creates its skills directory when missing.
+- Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Adding or pinning an Agent creates its skills directory when missing.
 - Installs and management changes write a commit-friendly `.skillctl/workspace.json` under the Workspace root (SSH `sourceRemote`, pinned Agents, installed skills). Re-adding that directory restores pins and auto-installs missing skills. If the CLI is not initialized yet and the current directory has this file, its `sourceRemote` can complete source setup.
 - The top-right Install button opens a category dialog and installs into the current Agent under the current Workspace. The enable/disable control on a card renames `SKILL.md` ↔ `SKILL.md.disable`.
 - Click a Skill card to open its detail page, which reads the landed `SKILL.md` in that Workspace/Agent (`SKILL.md.disable` when disabled). YAML frontmatter and Markdown body are shown separately. The enable/disable control does not open detail.
 - Removing a Workspace only removes the management entry; it never deletes project files. The user home Workspace cannot be removed.
-- Removing an Agent's skills deletes that Agent's skills directory in the current Workspace and unpins it. If the directory itself is a symlink, only the link is removed.
+- Removing an Agent deletes that Agent's full directory in the current Workspace (for example `.cursor`) and unpins it. If the directory itself is a symlink, only the link is removed.
 - The page filters by name, enabled state, broken links, symlinks, or copies. It places enabled skills before disabled ones and refreshes filesystem state every three seconds. Selected skills in the current result can be deleted together: a symlink removes only the link, a copy removes the installed directory, and the source is kept. One failure does not stop the rest.
 - A broken symlink can be restored by choosing a new source directory. That directory must exist and contain `SKILL.md` or `SKILL.md.disable`. The missing old source is left untouched.
 - Workspace paths and pinned Agents are stored in `~/.config/skillctl/config.json`.
 
-**Catalog `/catalog`**
+**Skill Source `/catalog`**
 
+- The page header Path settings control links a Skill source (absolute path or git URL) and cache directory; picking a local directory only fills the input until you save.
 - Visually edit `skillctl-skills.json` and `skillctl-categories.json`. Change category, description, and install-time `enabled`, and sync unregistered local skills from the source directory. This switch only affects `install`, not files already installed.
 - Click a card to open detail for the registered skill's source `SKILL.md`. Uncached external skills show as not prepared; the page does not download them automatically.
-- Deleting a catalog entry removes the registry record only; source files are not deleted.
+- Deleting a source entry removes the registry record only; source files are not deleted.
 
 **Shared rules**
 

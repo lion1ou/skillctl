@@ -444,14 +444,19 @@ test('启停接口拒绝越过 target 根目录', () => {
   }
 });
 
-test('删除 Agent skills 目录时保留软链接源', () => {
+test('删除 Agent 时移除整个 Agent 目录并保留软链接源', () => {
   const repo = createTmpRepo('skillctl-manager-remove-agent-');
   const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
-    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean; skillsPath: string })
+    | ((input: { workspaceRoot: string; target: string }) => {
+      removed: boolean;
+      skillsPath: string;
+      agentPath: string;
+    })
     | undefined;
   try {
     repo.writeFile('sources/linked/SKILL.md', '# linked');
     repo.writeFile('.cursor/skills/copied/SKILL.md', '# copied');
+    repo.writeFile('.cursor/mcp.json', '{}');
     symlinkSync(
       join(repo.root, 'sources/linked'),
       join(repo.root, '.cursor/skills/linked'),
@@ -463,7 +468,8 @@ test('删除 Agent skills 目录时保留软链接源', () => {
 
     assert.equal(result?.removed, true);
     assert.equal(result?.skillsPath, join(repo.root, '.cursor/skills'));
-    assert.equal(existsSync(join(repo.root, '.cursor/skills')), false);
+    assert.equal(result?.agentPath, join(repo.root, '.cursor'));
+    assert.equal(existsSync(join(repo.root, '.cursor')), false);
     assert.equal(existsSync(join(repo.root, 'sources/linked/SKILL.md')), true);
   } finally {
     repo.cleanup();
@@ -486,42 +492,43 @@ test('删除不存在的 Agent skills 目录保持幂等', () => {
   }
 });
 
-test('Agent skills 根目录为软链接时只删除链接', () => {
+test('Agent 目录为软链接时只删除链接并保留源', () => {
   const repo = createTmpRepo('skillctl-manager-remove-root-link-');
   const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
-    | ((input: { workspaceRoot: string; target: string }) => { removed: boolean })
+    | ((input: { workspaceRoot: string; target: string }) => {
+      removed: boolean;
+      agentPath: string;
+    })
     | undefined;
   try {
-    repo.writeFile('sources/cursor/review/SKILL.md', '# review');
-    repo.mkdir('.cursor');
-    symlinkSync(join(repo.root, 'sources/cursor'), join(repo.root, '.cursor/skills'), 'dir');
+    repo.writeFile('sources/cursor/skills/review/SKILL.md', '# review');
+    symlinkSync(join(repo.root, 'sources/cursor'), join(repo.root, '.cursor'), 'dir');
 
     assert.equal(removeManagedAgentSkills?.({
       workspaceRoot: repo.root,
       target: 'cursor',
     }).removed, true);
-    assert.equal(existsSync(join(repo.root, '.cursor/skills')), false);
-    assert.equal(existsSync(join(repo.root, 'sources/cursor/review/SKILL.md')), true);
+    assert.equal(existsSync(join(repo.root, '.cursor')), false);
+    assert.equal(existsSync(join(repo.root, 'sources/cursor/skills/review/SKILL.md')), true);
   } finally {
     repo.cleanup();
   }
 });
 
-test('Agent skills 根目录为断开的软链接时仍删除链接', () => {
+test('Agent 目录为断开的软链接时仍删除链接', () => {
   const repo = createTmpRepo('skillctl-manager-remove-broken-link-');
   const removeManagedAgentSkills = Reflect.get(skillManager, 'removeManagedAgentSkills') as
     | ((input: { workspaceRoot: string; target: string }) => { removed: boolean })
     | undefined;
   try {
-    repo.mkdir('.cursor');
-    const skillsPath = join(repo.root, '.cursor/skills');
-    symlinkSync(join(repo.root, 'missing-source'), skillsPath, 'dir');
+    const agentPath = join(repo.root, '.cursor');
+    symlinkSync(join(repo.root, 'missing-source'), agentPath, 'dir');
 
     assert.equal(removeManagedAgentSkills?.({
       workspaceRoot: repo.root,
       target: 'cursor',
     }).removed, true);
-    assert.throws(() => lstatSync(skillsPath), /ENOENT/);
+    assert.throws(() => lstatSync(agentPath), /ENOENT/);
   } finally {
     repo.cleanup();
   }

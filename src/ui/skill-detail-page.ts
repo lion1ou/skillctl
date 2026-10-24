@@ -23,7 +23,7 @@ export const SKILL_DETAIL_PAGE = `<!doctype html>
   ${renderManagerNav('catalog')}
   <header class="page-header detail-header">
     <div>
-      <a class="back-link" href="/catalog">← 返回 Skill 目录</a>
+      <a class="back-link" href="/catalog">← 返回 Skill 源</a>
       <h1 class="page-title" id="skillTitle">Skill 详情</h1>
       <p class="subtitle" id="skillDescription">正在读取 SKILL.md…</p>
     </div>
