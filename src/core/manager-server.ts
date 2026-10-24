@@ -24,6 +24,7 @@ import {
   syncUnregisteredSkills,
 } from './catalog-editor.js';
 import { installCatalogSkills, spawnExternalSkillAdd } from './catalog-install.js';
+import { resolveInstallMode } from './installer.js';
 import {
   loadInstalledSkillDetail,
   removeManagedAgentSkills,
@@ -313,7 +314,9 @@ async function routeInstalledApi(
   if (request.method === 'POST' && url.pathname === '/api/skills/install') {
     const input = await readJson(request, 8192);
     getTarget(readString(input.target, 'target'));
-    const mode = input.mode === 'copy' ? 'copy' : 'symlink';
+    const mode = resolveInstallMode(
+      typeof input.mode === 'string' ? input.mode : undefined,
+    );
     const categoryIds = asStringArray(input.categoryIds);
     const skillIds = asStringArray(input.skillIds);
     const workspace = readManagedWorkspace(input.workspace, env);

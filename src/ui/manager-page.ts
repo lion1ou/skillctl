@@ -1,9 +1,14 @@
+import { defaultInstallMode, supportsSymlinkInstall } from '../core/installer.js';
 import {
   INITIALIZATION_SCRIPT,
   MANAGER_STYLES,
   renderInitializationDialog,
   renderManagerNav,
 } from './manager-chrome.js';
+
+const INSTALL_MODE_OPTIONS = supportsSymlinkInstall()
+  ? `<option value="symlink"${defaultInstallMode() === 'symlink' ? ' selected' : ''}>软链</option><option value="copy"${defaultInstallMode() === 'copy' ? ' selected' : ''}>复制</option>`
+  : '<option value="copy" selected>复制</option>';
 
 /** 将本机绝对路径压缩为适合卡片展示的短路径。 */
 export function abbreviateSkillPath(path: string, workspaceRoot: string, homeRoot: string): string {
@@ -209,7 +214,7 @@ export const MANAGER_PAGE = `<!doctype html>
       <div class="install-groups" id="categoryList"></div>
       <div class="field">
         <span>安装模式</span>
-        <select id="installMode"><option value="symlink">软链</option><option value="copy">复制</option></select>
+        <select id="installMode">${INSTALL_MODE_OPTIONS}</select>
       </div>
       <label class="check-row"><input id="installForce" type="checkbox"><span>覆盖目标已有内容</span></label>
       <pre class="install-log" id="installLog"></pre>

@@ -8,13 +8,13 @@ import {
   renameSync,
   rmSync,
   statSync,
-  symlinkSync,
   unlinkSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { normalizeSkillDescription, parseFrontmatter } from './frontmatter.js';
 import { MANIFEST_FILE } from './brand.js';
+import { isDirectoryLink, linkDirectory } from './fs-link.js';
+import { normalizeSkillDescription, parseFrontmatter } from './frontmatter.js';
 import { readInstallRecord, writeInstallRecord } from './install-record.js';
 import { TARGETS, getTarget, type TargetId } from './targets.js';
 
@@ -146,7 +146,7 @@ export function removeManagedSkill(input: {
   const skill = scanManagedSkills(workspaceRoot).find((item) =>
     item.target === input.target && item.relativeDir === input.relativeDir);
   if (!skill) throw new Error('未找到要管理的 skill');
-  if (lstatSync(targetRoot).isSymbolicLink()) {
+  if (isDirectoryLink(targetRoot)) {
     throw new Error('Agent skills 根目录为软链，不能单独删除其中的 Skill');
   }
 
@@ -208,7 +208,7 @@ export function restoreBrokenSkillSymlink(input: {
     item.target === input.target && item.relativeDir === input.relativeDir);
   if (!skill) throw new Error('未找到要管理的 skill');
   if (!skill.isBroken || !skill.isSymlink) throw new Error('该 Skill 不是损坏软链');
-  if (lstatSync(targetRoot).isSymbolicLink()) {
+  if (isDirectoryLink(targetRoot)) {
     throw new Error('Agent skills 根目录为软链，不能单独恢复其中的 Skill');
   }
 
@@ -232,10 +232,10 @@ export function restoreBrokenSkillSymlink(input: {
   const previousTarget = readlinkSync(skill.installedPath);
   unlinkSync(skill.installedPath);
   try {
-    symlinkSync(sourcePath, skill.installedPath);
+    linkDirectory(sourcePath, skill.installedPath);
   } catch (error) {
     try {
-      symlinkSync(previousTarget, skill.installedPath);
+      linkDirectory(previousTarget, skill.installedPath);
     } catch (rollbackError) {
       const reason = error instanceof Error ? error.message : String(error);
       const rollback = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
@@ -264,24 +264,23 @@ export function removeManagedAgentSkills(input: {
   ) {
     throw new Error('Agent 路径超出 Workspace');
   }
-  let pathState: ReturnType<typeof lstatSync>;
   try {
-    pathState = lstatSync(agentPath);
+    lstatSync(agentPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     try {
-      pathState = lstatSync(skillsPath);
+      lstatSync(skillsPath);
     } catch (skillsError) {
       if ((skillsError as NodeJS.ErrnoException).code === 'ENOENT') {
         return { removed: false, skillsPath, agentPath };
       }
       throw skillsError;
     }
-    if (pathState.isSymbolicLink()) unlinkSync(skillsPath);
+    if (isDirectoryLink(skillsPath)) unlinkSync(skillsPath);
     else rmSync(skillsPath, { recursive: true });
     return { removed: true, skillsPath, agentPath };
   }
-  if (pathState.isSymbolicLink()) {
+  if (isDirectoryLink(agentPath)) {
     unlinkSync(agentPath);
   } else {
     rmSync(agentPath, { recursive: true });
@@ -372,7 +371,7 @@ function buildManagedSkill(
 ): ManagedSkill {
   const metadata = parseFrontmatter(readFileSync(join(skillDir, marker.file), 'utf8'));
   const relativeDir = relative(targetRoot, skillDir);
-  const isSymlink = lstatSync(skillDir).isSymbolicLink();
+  const isSymlink = isDirectoryLink(skillDir);
   return {
     id: `${target}:${relativeDir}`,
     target,
@@ -416,15 +415,9 @@ function resolveSkillMarker(skillDir: string): { file: string; isEnabled: boolea
   return null;
 }
 
-/** 区分有效目录软链和断链；普通路径返回 none。 */
+/** 区分有效目录软链和断链；普通路径返回 none。Windows junction 也算软链。 */
 function classifyDirectorySymlink(path: string): 'directory' | 'broken' | 'none' {
-  let pathState: ReturnType<typeof lstatSync>;
-  try {
-    pathState = lstatSync(path);
-  } catch {
-    return 'none';
-  }
-  if (!pathState.isSymbolicLink()) return 'none';
+  if (!isDirectoryLink(path)) return 'none';
   try {
     return statSync(path).isDirectory() ? 'directory' : 'broken';
   } catch {

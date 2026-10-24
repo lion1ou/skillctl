@@ -2,8 +2,14 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MANIFEST_FILE } from './brand.js';
+import { resolveNpxExecutable } from './fs-link.js';
 import { readInstallRecord, writeInstallRecord } from './install-record.js';
-import { installItem, type InstallMode, type InstallStatus } from './installer.js';
+import {
+  installItem,
+  resolveInstallMode,
+  type InstallMode,
+  type InstallStatus,
+} from './installer.js';
 import {
   externalCacheDir,
   loadSkillCatalog,
@@ -87,12 +93,14 @@ export function spawnExternalSkillAdd(
   onLog?: (line: string) => void,
 ): Promise<void> {
   mkdirSync(cachePackageDir, { recursive: true });
+  const npx = resolveNpxExecutable();
   const args = ['-y', 'skills', 'add', packageId, '--skill', ...skillNames, '--agent', 'universal', '--copy', '-y'];
-  onLog?.(`$ npx ${args.join(' ')}`);
+  onLog?.(`$ ${npx} ${args.join(' ')}`);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn('npx', args, {
+    const child = spawn(npx, args, {
       cwd: cachePackageDir,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
     let stdout = '';
     let stderr = '';
@@ -236,6 +244,7 @@ export async function installCatalogSkills(input: {
   onLog?: (line: string) => void;
 }): Promise<CatalogInstallResult> {
   const log = input.onLog ?? (() => undefined);
+  const mode = resolveInstallMode(input.mode);
   const catalog = loadSkillCatalog(input.sourceDir);
   const selected = resolveCatalogSkills(catalog, input.selection, input.emptySelectionMessage);
   const { installable, skippedDisabled } = partitionInstallableSkills(selected);
@@ -258,12 +267,12 @@ export async function installCatalogSkills(input: {
     installable,
     input.runExternalPrepare,
   );
-  log(`开始分发到 ${input.targets.join(', ')}，模式 ${input.mode}`);
+  log(`开始分发到 ${input.targets.join(', ')}，模式 ${mode}`);
   const items = distributePreparedSkills({
     scopeRoot: input.scopeRoot,
     targets: input.targets,
     prepared,
-    mode: input.mode,
+    mode,
     force: input.force,
   });
   for (const item of items) {

@@ -80,10 +80,10 @@ skill-ctl manage
 
 `install` always runs: select → check → prepare → distribute.
 
-1. Choose scope (current directory or `~`), mode (symlink or copy), targets, and skills.
+1. Choose scope (current directory or `~`), mode (symlink or copy), targets, and skills. **Windows only supports `copy`** (CLI/manage UI omit symlink; a project config that says symlink still installs as copy). Other platforms default to `symlink`.
 2. Interactive skill selection is grouped by category. Child skills are indented. Selecting a category selects every skill in it.
 3. Skills missing from the registry are removed from the category table with a notice, not an error.
-4. Missing external skills are cached with a progress spinner, then copied or symlinked into each target.
+4. Missing external skills are cached with a progress spinner (via `npx.cmd` on Windows), then copied or symlinked into each target.
 5. Skills with `"enabled": false` in the registry are skipped during install and listed in the result. Missing `enabled` is treated as enabled.
 
 ### manage

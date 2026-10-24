@@ -2,18 +2,36 @@ import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
-  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   statSync,
-  symlinkSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { isDirectoryLink, isSameLinkTarget, linkDirectory } from './fs-link.js';
 
 export type InstallMode = 'symlink' | 'copy';
+
+/** Windows 不支持以软链方式安装 Skill（junction/`isSymbolicLink` 不可靠，易误删源目录）。 */
+export function supportsSymlinkInstall(platform: NodeJS.Platform = process.platform): boolean {
+  return platform !== 'win32';
+}
+
+export function defaultInstallMode(platform: NodeJS.Platform = process.platform): InstallMode {
+  return supportsSymlinkInstall(platform) ? 'symlink' : 'copy';
+}
+
+/** 规范化安装模式；Windows 上始终为 copy（软链不可用）。 */
+export function resolveInstallMode(
+  mode: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+): InstallMode {
+  if (!supportsSymlinkInstall(platform)) return 'copy';
+  if (mode === 'copy') return 'copy';
+  if (mode === undefined || mode === '' || mode === 'symlink') return 'symlink';
+  throw new Error(`未知安装模式：${mode}`);
+}
 
 export interface InstallOpts {
   source: string;
@@ -31,7 +49,8 @@ export interface InstallResult {
 }
 
 export function installItem(opts: InstallOpts): InstallResult {
-  const { source, dest, mode, force } = opts;
+  const { source, dest, force } = opts;
+  const mode = resolveInstallMode(opts.mode);
   if (!existsSync(source)) {
     throw new Error(`安装失败：源路径不存在 ${source}`);
   }
@@ -56,15 +75,14 @@ export function hashPath(p: string): string {
 
 function installSymlink(source: string, dest: string, force: boolean, exists: boolean): InstallResult {
   if (exists) {
-    const stat = lstatSync(dest);
-    if (stat.isSymbolicLink()) {
-      if (readlinkSync(dest) === source) return { status: 'unchanged', sourceHash: null };
+    if (isDirectoryLink(dest)) {
+      if (isSameLinkTarget(dest, source)) return { status: 'unchanged', sourceHash: null };
       if (!force) {
         return skip(dest, '已存在指向其他源的软链');
       }
       rmSync(dest, { recursive: true, force: true });
       mkdirSync(dirname(dest), { recursive: true });
-      symlinkSync(source, dest);
+      linkDirectory(source, dest);
       return { status: 'overwrite', sourceHash: null };
     }
     if (!force) {
@@ -73,7 +91,7 @@ function installSymlink(source: string, dest: string, force: boolean, exists: bo
     rmSync(dest, { recursive: true, force: true });
   }
   mkdirSync(dirname(dest), { recursive: true });
-  symlinkSync(source, dest);
+  linkDirectory(source, dest);
   return { status: 'create', sourceHash: null };
 }
 
@@ -131,11 +149,7 @@ function walk(root: string, fn: (f: FileVisit) => void, sub = ''): void {
 }
 
 function isSymlink(p: string): boolean {
-  try {
-    return lstatSync(p).isSymbolicLink();
-  } catch {
-    return false;
-  }
+  return isDirectoryLink(p);
 }
 
 function skip(dest: string, reason: string): InstallResult {

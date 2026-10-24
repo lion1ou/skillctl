@@ -293,8 +293,15 @@ test('已安装 Skill 可按启用状态、失效和安装方式同时筛选', (
 test('安装管理列表支持批量选择删除，并为损坏软链提供恢复入口', () => {
   assert.match(MANAGER_PAGE, /id="installModeFilter"/);
   assert.match(MANAGER_PAGE, /<option value="broken">已失效<\/option>/);
+  if (process.platform === 'win32') {
+    assert.match(MANAGER_PAGE, /id="installMode"><option value="copy" selected>复制<\/option>/);
+    assert.doesNotMatch(MANAGER_PAGE, /id="installMode">[\s\S]*value="symlink"/);
+  } else {
+    assert.match(MANAGER_PAGE, /id="installMode">[\s\S]*value="symlink"/);
+    assert.match(MANAGER_PAGE, /id="installMode">[\s\S]*value="copy"/);
+  }
   assert.match(MANAGER_PAGE, /<option value="symlink">软链<\/option>/);
-  assert.match(MANAGER_PAGE, /<option value="copy">复制<\/option>/);
+  assert.match(MANAGER_PAGE, /id="installModeFilter"[\s\S]*<option value="copy">复制<\/option>/);
   assert.match(MANAGER_PAGE, /id="selectVisibleSkillsButton"/);
   assert.match(MANAGER_PAGE, /id="deleteSelectedButton"/);
   assert.match(MANAGER_PAGE, /data-select-skill=/);

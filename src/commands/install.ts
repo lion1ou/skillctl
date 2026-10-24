@@ -11,7 +11,12 @@ import {
   spawnExternalSkillAdd,
 } from '../core/catalog-install.js';
 import { syncWorkspaceProjectAfterChange } from '../core/workspace-bootstrap.js';
-import { type InstallMode } from '../core/installer.js';
+import {
+  defaultInstallMode,
+  resolveInstallMode,
+  supportsSymlinkInstall,
+  type InstallMode,
+} from '../core/installer.js';
 import {
   findUnregisteredLocalSkills,
   loadSkillCatalog,
@@ -37,7 +42,14 @@ export default class Install extends Command {
     skill: Flags.string({ char: 's', multiple: true, description: '安装指定 skill，可重复' }),
     target: Flags.string({ char: 't', description: '逗号分隔 target 或 all' }),
     global: Flags.boolean({ char: 'g', default: false, description: '安装到用户根目录' }),
-    mode: Flags.string({ char: 'm', options: ['symlink', 'copy'], default: 'symlink' }),
+    mode: Flags.string({
+      char: 'm',
+      options: supportsSymlinkInstall() ? ['symlink', 'copy'] : ['copy'],
+      default: defaultInstallMode(),
+      description: supportsSymlinkInstall()
+        ? '安装方式（symlink 或 copy）'
+        : '安装方式；Windows 仅支持 copy',
+    }),
     force: Flags.boolean({ char: 'f', default: false, description: '覆盖目标已有内容' }),
     'target-root': Flags.string({ description: '显式指定安装根目录' }),
   };
@@ -125,15 +137,19 @@ async function promptBasicSelection(): Promise<Omit<InstallSelection, 'skills'>>
     initialValue: 'project',
   });
   if (p.isCancel(scope)) throw new Error('已取消');
-  const mode = await p.select({
-    message: '安装模式',
-    options: [
-      { value: 'symlink', label: '软链' },
-      { value: 'copy', label: '复制' },
-    ],
-    initialValue: 'symlink',
-  });
-  if (p.isCancel(mode)) throw new Error('已取消');
+  let mode: InstallMode = 'copy';
+  if (supportsSymlinkInstall()) {
+    const selected = await p.select({
+      message: '安装模式',
+      options: [
+        { value: 'symlink', label: '软链' },
+        { value: 'copy', label: '复制' },
+      ],
+      initialValue: defaultInstallMode(),
+    });
+    if (p.isCancel(selected)) throw new Error('已取消');
+    mode = selected as InstallMode;
+  }
   const targets = await p.multiselect({
     message: '目标环境',
     options: TARGETS.map((target) => ({ value: target.id, label: target.id })),
@@ -143,7 +159,7 @@ async function promptBasicSelection(): Promise<Omit<InstallSelection, 'skills'>>
   if (p.isCancel(targets)) throw new Error('已取消');
   return {
     scope: scope as 'project' | 'global',
-    mode: mode as InstallMode,
+    mode,
     targets: targets as TargetId[],
   };
 }
@@ -161,7 +177,7 @@ function resolveFlagSelection(flags: {
   for (const targetId of targetIds) getTarget(targetId.trim());
   return {
     scope,
-    mode: flags.mode as InstallMode,
+    mode: resolveInstallMode(flags.mode),
     targets: targetIds.map((targetId) => targetId.trim() as TargetId),
   };
 }
