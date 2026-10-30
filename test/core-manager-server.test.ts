@@ -141,6 +141,8 @@ test('管理服务可添加 Workspace、扫描其中 Skill 并固定 Agent', asy
     assert.deepEqual(removedPayload.skills, []);
     assert.deepEqual(removedPayload.removal, { removed: true, target: 'cursor' });
     assert.equal(existsSync(join(workspace, '.cursor/skills')), false);
+    // fixture 中 .cursor 仅含 skills，因此整目录应被删除
+    assert.equal(existsSync(join(workspace, '.cursor')), false);
 
     const afterRemoval = await (await request('/api/workspaces')).json() as {
       workspaces: { path: string; pinnedTargetIds: string[] }[];

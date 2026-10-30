@@ -336,7 +336,7 @@ function renderAgents(){
   agentList.innerHTML=agents.map((agent)=>{
     const detected=agent.detected?'已检测到':'未落地';
     const shortPath='…/'+agent.skillsDir;
-    const remove=agent.id===currentAgent?'<button type="button" class="corner-delete" data-delete-agent="'+escapeHtml(agent.id)+'" title="删除 Agent 目录" aria-label="删除 '+escapeHtml(agent.id)+'">×</button>':'';
+    const remove=agent.id===currentAgent?'<button type="button" class="corner-delete" data-delete-agent="'+escapeHtml(agent.id)+'" title="删除 Agent Skills" aria-label="删除 '+escapeHtml(agent.id)+'">×</button>':'';
     return '<div class="agent-row"><button type="button" data-agent="'+escapeHtml(agent.id)+'" class="'+(agent.id===currentAgent?'active ':'')+(agent.detected?'':'missing')+'"><div>'+escapeHtml(agent.id)+' · '+agent.skillCount+' 个 skill · '+detected+'</div><span class="meta" title="'+escapeHtml(agent.skillsPath)+'">'+escapeHtml(shortPath)+'</span></button>'+remove+'</div>';
   }).join('');
 }
@@ -516,8 +516,8 @@ agentList.addEventListener('click',(event)=>{
     if(!agent)return;
     askConfirmation({
       title:'删除 '+agent.id,
-      message:'将删除当前 Workspace 中该 Agent 的完整目录，并取消固定。',
-      detail:agent.agentPath+' · '+agent.skillCount+' 个 Skill。此操作不可恢复；若目录本身为软链接，只会删除链接。',
+      message:'将删除当前 Workspace 中该 Agent 的 skills 目录并取消固定。若 Agent 目录仅含 skills，会一并删除整个 Agent 目录；否则保留其他文件。',
+      detail:agent.skillsPath+' · '+agent.skillCount+' 个 Skill。此操作不可恢复；若目标本身为软链接，只会删除链接。',
       action:()=>removeAgent(agent.id),
     });
     return;

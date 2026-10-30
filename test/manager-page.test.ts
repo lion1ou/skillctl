@@ -99,6 +99,10 @@ test('Workspace 与所有可见 Agent 使用行内危险删除按钮', () => {
   assert.match(MANAGER_STYLES, /\.corner-delete\{[^}]*z-index:2/);
   assert.match(MANAGER_PAGE, /index===0\|\|item\.path!==currentWorkspace\?'':/);
   assert.match(MANAGER_PAGE, /agent\.id===currentAgent\?'<button[^']*corner-delete/);
+  assert.match(MANAGER_PAGE, /title="删除 Agent Skills"/);
+  assert.match(MANAGER_PAGE, /将删除当前 Workspace 中该 Agent 的 skills 目录并取消固定/);
+  assert.match(MANAGER_PAGE, /若 Agent 目录仅含 skills，会一并删除整个 Agent 目录/);
+  assert.doesNotMatch(MANAGER_PAGE, /该 Agent 的完整目录/);
 });
 
 test('Agent 路径省略 Workspace 前缀并支持批量复选固定', () => {

@@ -102,7 +102,7 @@ skill-ctl manage --port 4173 --no-open
 - 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent。卡片上的启用/禁用会把 `SKILL.md` 与 `SKILL.md.disable` 互相改名。
 - 点击 Skill 卡片进入详情，读取该 Workspace/Agent 下已落地的 `SKILL.md`（禁用为 `SKILL.md.disable`）。YAML frontmatter 与 Markdown 正文分开展示。点击启用/禁用不会进入详情。
 - 删除 Workspace 只从管理列表移除，不删除项目文件；用户根目录不可删除。
-- 删除某个 Agent 会删除当前 Workspace 中该 Agent 的完整目录（如 `.cursor`）并取消固定；目录本身为软链时只删除链接。
+- 删除某个 Agent 会取消固定并删除其 skills 目录（如 `.cursor/skills`）。若 Agent 目录仅含 skills，则一并删除整个 Agent 目录；否则保留其他文件。被删路径本身为软链时只删除链接。
 - 可按名称、启用状态、已失效、软链或复制筛选，每 3 秒同步一次文件系统变化；已启用 Skill 默认排在未启用项之前。可勾选当前筛选结果批量删除：软链只移除链接，副本删除目标目录，源目录保留；单项失败不会中断其余项。
 - 损坏软链可选择新的源目录恢复。新目录必须存在，且包含 `SKILL.md` 或 `SKILL.md.disable`；已丢失的旧源不会被改动。
 - Workspace 列表和固定展示的 Agent 保存在 `~/.config/skillctl/config.json`。

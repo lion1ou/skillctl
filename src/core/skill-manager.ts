@@ -11,7 +11,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { MANIFEST_FILE } from './brand.js';
 import { isDirectoryLink, linkDirectory } from './fs-link.js';
 import { normalizeSkillDescription, parseFrontmatter } from './frontmatter.js';
@@ -246,7 +246,7 @@ export function restoreBrokenSkillSymlink(input: {
   return scanInstalledWorkspace(workspaceRoot);
 }
 
-/** 删除白名单 Agent 的完整目录（skills 的父目录）；目录为软链时仅移除链接本身。 */
+/** 删除白名单 Agent 的 skills；若 Agent 目录仅含 skills 则整目录删除，否则只删 skills。 */
 export function removeManagedAgentSkills(input: {
   workspaceRoot?: string;
   target: TargetId;
@@ -256,6 +256,7 @@ export function removeManagedAgentSkills(input: {
   const skillsPath = resolve(workspaceRoot, skillsRel);
   const agentRel = dirname(skillsRel);
   const agentPath = agentRel === '.' ? skillsPath : resolve(workspaceRoot, agentRel);
+  const skillsName = basename(skillsRel);
   if (
     agentPath === workspaceRoot
     || !agentPath.startsWith(`${workspaceRoot}${sep}`)
@@ -265,27 +266,32 @@ export function removeManagedAgentSkills(input: {
     throw new Error('Agent 路径超出 Workspace');
   }
   try {
-    lstatSync(agentPath);
+    lstatSync(skillsPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    try {
-      lstatSync(skillsPath);
-    } catch (skillsError) {
-      if ((skillsError as NodeJS.ErrnoException).code === 'ENOENT') {
-        return { removed: false, skillsPath, agentPath };
-      }
-      throw skillsError;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { removed: false, skillsPath, agentPath };
     }
-    if (isDirectoryLink(skillsPath)) unlinkSync(skillsPath);
-    else rmSync(skillsPath, { recursive: true });
+    throw error;
+  }
+  if (agentPath !== skillsPath && agentHasOnlySkills(agentPath, skillsName)) {
+    if (isDirectoryLink(agentPath)) unlinkSync(agentPath);
+    else rmSync(agentPath, { recursive: true });
     return { removed: true, skillsPath, agentPath };
   }
-  if (isDirectoryLink(agentPath)) {
-    unlinkSync(agentPath);
-  } else {
-    rmSync(agentPath, { recursive: true });
-  }
+  if (isDirectoryLink(skillsPath)) unlinkSync(skillsPath);
+  else rmSync(skillsPath, { recursive: true });
   return { removed: true, skillsPath, agentPath };
+}
+
+/** Agent 目录可读且除 skills 外无其他条目时返回 true；目录缺失或不可列则视为不可整删。 */
+function agentHasOnlySkills(agentPath: string, skillsName: string): boolean {
+  try {
+    const entries = readdirSync(agentPath);
+    return entries.length === 1 && entries[0] === skillsName;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 /** 读取已落地 Skill 的 SKILL.md；软链只读目标文件，不允许文件路径逃出 Skill 目录。 */
