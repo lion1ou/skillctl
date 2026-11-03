@@ -1,6 +1,7 @@
 dist/
 .cache/
 node_modules/
+designs/
 *.tsbuildinfo
 *.tgz
 .DS_Store
