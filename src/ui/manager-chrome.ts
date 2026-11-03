@@ -14,6 +14,10 @@ export const MANAGER_STYLES = `
     .summary{color:var(--muted)}.summary strong{color:var(--text)}
     .page-header-actions{display:flex;flex-direction:column;align-items:flex-end;gap:10px}
     .page-header .summary{text-align:right}
+    .summary-path{display:inline-flex;align-items:center;gap:6px;max-width:min(420px,100%);margin-top:4px}
+    .summary-path-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.4 "Geist Mono","SF Mono","JetBrains Mono",monospace;color:var(--muted)}
+    .path-config-icon{width:28px;height:28px;min-width:28px;padding:0;border-radius:6px;border:1px solid #DEDEDB;background:#FFFFFF;color:var(--text);display:grid;place-items:center;flex:none;cursor:pointer}
+    .path-config-icon:hover{background:#F1F1EF}.path-config-icon svg{display:block}
     .page-header .config-entry,.nav-links .config-entry{height:30px;padding:0 12px;border-radius:6px;border:1px solid #DEDEDB;background:#FFFFFF;color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer}
     .page-header .config-entry:hover,.nav-links .config-entry:hover{background:#F1F1EF}
     .workspace-bar{display:flex;align-items:center;gap:8px;margin-bottom:14px;overflow:visible}.workspace-actions{display:flex;gap:8px;flex:none;margin-left:auto}
@@ -21,26 +25,34 @@ export const MANAGER_STYLES = `
     .workspace-tab-wrap{position:relative;display:flex;overflow:visible}
     .workspace-tab{height:auto;min-height:32px;padding:6px 11px;border-radius:6px;background:transparent;color:var(--muted);border:1px solid transparent;font-weight:500}
     .workspace-tab:hover{background:#FBFBFA;border-color:var(--line)}.workspace-tab.active{color:var(--text);background:#FFFFFF;border-color:#DCDCD8}
-    .toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 180px 180px;gap:10px;margin-bottom:20px}
-    .installed-toolbar{grid-template-columns:minmax(160px,1fr) 128px 128px auto auto auto;align-items:center}.installed-toolbar>button{min-width:96px}
+    .toolbar-stack{display:grid;gap:8px;margin-bottom:12px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .toolbar-filters>.toolbar-search{flex:0 1 160px;width:160px;min-width:120px;max-width:200px}
+    .toolbar-filters>select{flex:0 1 140px;min-width:112px;width:auto}
+    .toolbar-actions{gap:8px}.toolbar-actions>button{min-width:96px;flex:0 0 auto}
+    .result-count{color:var(--muted);font-size:13px;white-space:nowrap;margin-left:auto}.result-count strong{color:var(--text)}
+    .toolbar-filters>#installButton{margin-left:0;flex:0 0 auto}
     input,select,textarea{width:100%;padding:0 12px;border:1px solid #DEDEDB;border-radius:6px;background:#FFFFFF;color:var(--text);outline:none;font:inherit}
     input,select{height:36px}textarea{min-height:56px;padding:8px 10px;resize:vertical}
     select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m3 5 4 4 4-4' stroke='%23787774' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:14px}
     input:focus,select:focus,textarea:focus{border-color:#8A8A86;box-shadow:0 0 0 3px rgba(47,52,55,.05)}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-    .card{display:flex;flex-direction:column;min-width:0;padding:16px;border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;transition:transform .2s ease,box-shadow .2s ease}
-    .card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(47,52,55,.04)}.card.clickable{cursor:pointer}.card.clickable:focus-visible{outline:2px solid #787774;outline-offset:2px}
-    .card>button{margin-top:auto}
-    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;min-height:2.7em}.skill-title{display:flex;align-items:flex-start;gap:8px;min-width:0}.skill-select{display:grid;place-items:center;flex:none;margin-top:1px}.skill-select input{width:16px;height:16px;flex:none}.name{font-size:14px;font-weight:600;overflow-wrap:anywhere;line-height:1.35}
-    .badges{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 8px}.badge{padding:2px 7px;border-radius:9999px;background:#F1F1EF;color:#666662;font-size:10px;line-height:1.5;letter-spacing:.04em;text-transform:uppercase}
+    .card{display:flex;flex-direction:column;gap:6px;min-width:0;padding:14px;border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;transition:transform .2s ease,box-shadow .2s ease,opacity .2s ease}
+    .card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(47,52,55,.04)}.card.is-disabled{opacity:.55}.card.is-disabled .name,.card.is-disabled .description,.card.is-disabled .path{color:var(--muted)}
+    .card>button{margin-top:auto;align-self:flex-start}
+    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.skill-title{display:flex;align-items:flex-start;gap:8px;min-width:0;flex:1}.skill-meta{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0;flex:1}.skill-select{display:grid;place-items:center;flex:none;margin-top:1px}.skill-select input{width:16px;height:16px;flex:none}.name{font-size:14px;font-weight:600;min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35;cursor:pointer}.name:hover{color:#111}
+    .card-category{width:84px;max-width:84px;min-width:84px;flex:none;height:24px;padding:0 20px 0 6px;font-size:11px;background-position:right 6px center;background-size:12px}
+    .badges{display:flex;flex-wrap:wrap;gap:5px;margin:0}.badge{padding:2px 7px;border-radius:9999px;background:#F1F1EF;color:#666662;font-size:10px;line-height:1.5;letter-spacing:.04em;text-transform:uppercase;flex:none}
     .badge.on{background:#EDF3EC;color:var(--green)}.badge.off{background:#FDEBEC;color:var(--red)}.badge.broken{background:#FDEBEC;color:var(--red)}
-    .badge.local,.badge.symlink,.badge.category{background:#FBF3DB;color:#956400}.badge.external,.badge.copy,.badge.uncategorized{background:#F1F1EF;color:#666662}
+    .badge.local,.badge.symlink,.badge.category{background:#FBF3DB;color:#956400}.badge.external,.badge.copy,.badge.uncategorized{background:#E1F3FE;color:var(--blue)}
     .badge.cursor,.badge.claude,.badge.kiro,.badge.agents,.badge.codex,.badge.openclaw,.badge.hermes,.badge.gemini,.badge.copilot,.badge.windsurf,.badge.roo,.badge.opencode,.badge.openhands,.badge.droid,.badge.continue,.badge.trae,.badge.trae-cn,.badge.workbuddy,.badge.qoder,.badge.qoder-cn,.badge.codebuddy,.badge.qwen{background:#E1F3FE;color:#1F6C9F}
-    .description{color:#555A5D;margin:0 0 8px;font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
-    .description.readonly{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;min-height:calc(1.45em * 3);max-height:calc(1.45em * 3);overflow:hidden}
-    .description[contenteditable]{cursor:text;border-radius:8px;min-height:1.4em}
-    .description[contenteditable]:hover{background:#FBFBFA}.description[contenteditable]:focus{outline:1px solid #D8D8D4;padding:6px 8px;background:#FBFBFA;max-height:none;-webkit-line-clamp:unset;display:block}
-    .path{margin:0 0 8px;font:11px/1.45 "Geist Mono","SF Mono","JetBrains Mono",monospace;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
+    .description{color:#555A5D;margin:0;font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+    .description.readonly{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+    .description[data-open-detail]{cursor:pointer;display:block;max-height:calc(1.5em * 2);overflow:hidden}.description[data-open-detail]:hover{color:var(--text)}
+    .description>.badge{display:inline-block;float:none;padding:1px 6px;margin:0 6px 0 0;border-radius:9999px;font-size:10px;line-height:1.35;letter-spacing:.04em;text-transform:uppercase;vertical-align:text-bottom;white-space:nowrap}
+    .description[contenteditable]{cursor:text;border-radius:8px;min-height:1.4em;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+    .description[contenteditable]:hover{background:#FBFBFA}.description[contenteditable]:focus{outline:1px solid #D8D8D4;padding:6px 8px;background:#FBFBFA;max-height:none;-webkit-line-clamp:unset;display:block;overflow:visible}
+    .path{margin:0;font:11px/1.45 "Geist Mono","SF Mono","JetBrains Mono",monospace;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
     [hidden]{display:none!important}
     dl{display:grid;grid-template-columns:52px 1fr;gap:4px 8px;margin:0 0 8px;font-size:11px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere;color:#555A5D}
     button{height:32px;border:1px solid #111;border-radius:6px;padding:0 12px;font-weight:600;font-size:13px;cursor:pointer;background:#111;color:#FFFFFF;transition:background .2s ease,transform .15s ease}button:hover{background:#333}button:active{transform:scale(.98)}button:focus-visible,a:focus-visible{outline:2px solid #787774;outline-offset:2px}
@@ -51,7 +63,7 @@ export const MANAGER_STYLES = `
     button.ghost{background:#FFFFFF;color:var(--text);border:1px solid #DEDEDB}button.ghost:hover{background:#F1F1EF}button:disabled{cursor:wait;opacity:.45}
     .empty{grid-column:1/-1;padding:64px 20px;text-align:center;border:1px dashed #D8D8D4;border-radius:8px;color:var(--muted)}
     .notice{display:none;margin-bottom:14px;padding:10px 12px;border-radius:6px;background:#FDEBEC;color:var(--red)}.notice.show{display:block}
-    .notice.ok{background:#EDF3EC;color:var(--green)}.symlink-note{color:#956400;font-size:11px;margin:0 0 8px}
+    .notice.ok{background:#EDF3EC;color:var(--green)}.symlink-note{color:#956400;font-size:11px;margin:0}
     .layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;align-items:stretch;flex:1;min-height:0}
     .layout>.panel{min-height:0;overflow:auto}
     .catalog-main{display:flex;flex-direction:column;min-height:0}
@@ -62,7 +74,7 @@ export const MANAGER_STYLES = `
     #categoryEditor{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}#categoryEditor h3{margin:0 0 10px;font-size:13px}.category-fields{display:grid;gap:10px}.category-fields .field{margin:0}.category-fields textarea{overflow:hidden}
     .list{overflow:visible;padding:8px 8px 0 0}.list button{width:100%;height:auto;min-height:34px;margin-bottom:6px;text-align:left;padding:7px 10px;line-height:1.35}
     .list button.active{border-color:#D8D8D4;background:#F1F1EF;color:#111}.list button .meta{display:block;margin-top:3px;font:400 11px/1.4 "Geist Mono","SF Mono","JetBrains Mono",monospace;color:var(--muted)}
-    .list button.missing{opacity:.62}.actions{display:flex;gap:6px;margin-top:8px}.card>.actions{margin-top:auto}.actions>*{min-width:0}.actions button,.actions select{flex:1}
+    .list button.missing{opacity:.62}.actions{display:flex;gap:6px;margin-top:8px}.actions>*{min-width:0}.actions button,.actions select{flex:1}
     .list{overflow:visible;padding:8px 8px 0 0}.agent-row{position:relative;display:flex;gap:5px;align-items:stretch;overflow:visible;margin-bottom:6px}.agent-row>button[data-agent]{flex:1;margin-bottom:0}
     .corner-delete{position:absolute;top:-8px;right:-8px;z-index:2;width:20px!important;height:20px!important;min-height:0!important;padding:0!important;border-radius:9999px!important;border:1px solid #F4DADB;background:#FDEBEC;color:var(--red);font-size:14px;line-height:1;display:grid;place-items:center;box-shadow:0 1px 3px rgba(47,52,55,.08)}.corner-delete:hover{background:#F9DDDF}
     .install-groups{display:grid;gap:8px;max-height:360px;overflow:auto;margin-top:12px}.install-group{border:1px solid var(--line);border-radius:6px;overflow:hidden}.install-group-head{display:flex;align-items:center;background:#FAF9F7}.install-category-check{display:grid;place-items:center;padding:10px 4px 10px 12px}.install-category-check input{width:16px;height:16px;flex:none}.install-category-toggle{display:flex;align-items:center;gap:8px;flex:1;height:auto;padding:10px 12px 10px 6px;border:0;background:transparent;color:var(--text);text-align:left}.install-category-toggle:hover{background:#F5F4F1}.install-category-toggle>span:first-child{flex:1;font-weight:600}.install-category-toggle small{color:var(--muted)}.install-chevron{font-size:18px;line-height:1;transition:transform .15s}.install-category-toggle[aria-expanded="true"] .install-chevron{transform:rotate(90deg)}.install-group-skills{display:grid;gap:6px;padding:8px;border-top:1px solid var(--line)}.install-group-skills label{display:flex;align-items:flex-start;gap:9px;padding:9px;border-radius:6px}.install-group-skills label:hover{background:#F7F6F3}.install-group-skills input{width:16px;height:16px;margin-top:2px;flex:none}.install-group-skills strong,.install-group-skills small{display:block}.install-group-skills small{color:var(--muted);font:11px/1.4 "Geist Mono","SF Mono",monospace}
@@ -90,9 +102,11 @@ export const MANAGER_STYLES = `
     .sync .actions{justify-content:flex-end}.sync .actions select{flex:0 1 240px}.sync .actions button{flex:0 0 auto}
     form .row{display:grid;gap:8px;margin-bottom:10px}
     @media(max-width:860px){
-      body{min-height:100%}main{width:min(100% - 24px,720px);height:auto;min-height:100dvh;padding-top:12px}.page-header,.layout,.toolbar{display:block}.page-header .summary{width:100%;margin-top:12px;text-align:left}.summary{margin-top:12px}
+      body{min-height:100%}main{width:min(100% - 24px,720px);height:auto;min-height:100dvh;padding-top:12px}
+      .page-header,.layout{display:block}.page-header .summary{width:100%;margin-top:12px;text-align:left}.summary{margin-top:12px}
       .grid{grid-template-columns:1fr}.topbar{position:static}
-      .installed-toolbar>button{width:100%;margin-top:10px}
+      .toolbar-filters>.toolbar-search,.toolbar-filters>select,.toolbar-filters>#installButton,.toolbar-actions>button{width:100%;max-width:none;flex:1 1 100%}
+      .result-count{margin-left:0;width:100%}
       .layout{flex:none;min-height:auto}.layout>.panel{max-height:none;margin-bottom:14px;overflow:visible}
       .catalog-main{min-height:auto}.catalog-scroll{overflow:visible}
       .skill-detail-layout{display:block;overflow:visible}.detail-meta{margin-bottom:14px}.detail-document{overflow:visible}

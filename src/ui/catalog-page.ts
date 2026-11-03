@@ -127,8 +127,11 @@ export const CATALOG_PAGE = `<!doctype html>
       <p class="subtitle">维护 Skill 来源、分类与安装策略，决定安装时可选择的内容。</p>
     </div>
     <div class="page-header-actions">
-      <button type="button" class="config-entry" id="initConfigButton">路径配置</button>
       <div class="summary" id="summary">正在读取配置表…</div>
+      <div class="summary-path">
+        <span class="summary-path-text" id="sourcePathText" title="">正在读取路径…</span>
+        <button type="button" class="path-config-icon" id="initConfigButton" title="路径配置" aria-label="路径配置"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M5.2 2.2 2.8 4.6v6.6h8.4V2.2H5.2Z" stroke="currentColor" stroke-width="1.2"/><path d="M5.2 2.2v2.4H2.8" stroke="currentColor" stroke-width="1.2"/><path d="M4.6 7.4h4.8M4.6 9.4h3.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+      </div>
     </div>
   </header>
   <div class="notice" id="notice"></div>
@@ -161,10 +164,20 @@ export const CATALOG_PAGE = `<!doctype html>
       </div>
     </aside>
     <section class="catalog-main">
-      <div class="toolbar">
-        <input id="search" placeholder="搜索 Skill">
-        <select id="enabledFilter"><option value="">全部启用状态</option><option value="on">安装时启用</option><option value="off">安装时跳过</option></select>
-        <select id="typeFilter"><option value="">全部类型</option><option value="local">local</option><option value="external">external</option></select>
+      <div class="toolbar-stack">
+        <div class="toolbar toolbar-filters">
+          <input class="toolbar-search" id="search" placeholder="搜索 Skill">
+          <select id="enabledFilter"><option value="">全部启用状态</option><option value="on">安装时启用</option><option value="off">安装时跳过</option></select>
+          <select id="typeFilter"><option value="">全部类型</option><option value="local">local</option><option value="external">external</option></select>
+          <select id="categoryScope"><option value="">跟随侧栏分类</option><option value="uncategorized">仅未分类</option><option value="categorized">仅已分类</option></select>
+          <span class="result-count" id="resultCount">匹配 <strong>0</strong> · 共 <strong>0</strong></span>
+          <button type="button" class="ghost" id="selectVisibleCatalogButton">全选当前结果</button>
+        </div>
+        <div class="toolbar toolbar-actions" id="catalogBulkActions" hidden>
+          <button type="button" class="positive" id="enableSelectedCatalogButton">设为安装启用</button>
+          <button type="button" class="ghost" id="skipSelectedCatalogButton">设为安装跳过</button>
+          <button type="button" class="danger" id="deleteSelectedCatalogButton">删除所选</button>
+        </div>
       </div>
       <div class="catalog-scroll">
         <div class="grid" id="grid"><div class="empty">正在读取配置表…</div></div>
@@ -209,10 +222,13 @@ const categoryList=document.querySelector('#categoryList');
 const search=document.querySelector('#search');
 const enabledFilter=document.querySelector('#enabledFilter');
 const typeFilter=document.querySelector('#typeFilter');
+const categoryScope=document.querySelector('#categoryScope');
 const categoryDialog=document.querySelector('#categoryDialog');
 const confirmDialog=document.querySelector('#confirmDialog');
 let confirmAction=null;
+let selectedCatalogSkills=new Set();
 const escapeHtml=(value)=>String(value).replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const sourcePathText=document.querySelector('#sourcePathText');
 
 function showNotice(message,ok=false){
   notice.textContent=message;
@@ -232,10 +248,16 @@ function categoryOf(skillId){
 }
 function visibleSkills(){
   const keyword=search.value.trim().toLowerCase();
+  const scope=categoryScope.value;
   return workspace.catalog.skills.filter((skill)=>{
-    const inCategory=currentCategory===''?true:currentCategory==='__uncategorized__'
-      ?workspace.uncategorized.some((item)=>item.id===skill.id)
-      :categoryOf(skill.id)?.id===currentCategory;
+    const categorized=Boolean(categoryOf(skill.id));
+    let inCategory=true;
+    if(scope==='uncategorized')inCategory=!categorized;
+    else if(scope==='categorized'){
+      inCategory=categorized;
+      if(currentCategory&&currentCategory!=='__uncategorized__')inCategory=categoryOf(skill.id)?.id===currentCategory;
+    }else if(currentCategory==='__uncategorized__')inCategory=!categorized;
+    else if(currentCategory)inCategory=categoryOf(skill.id)?.id===currentCategory;
     const matchesKeyword=!keyword||[skill.name,skill.description,skill.id,skill.package].some((value)=>String(value).toLowerCase().includes(keyword));
     const matchesEnabled=!enabledFilter.value||(enabledFilter.value==='on')===skill.enabled;
     const matchesType=!typeFilter.value||skill.type===typeFilter.value;
@@ -245,7 +267,10 @@ function visibleSkills(){
 
 function render(){
   const cats=workspace.catalog.categories;
-  summary.innerHTML='<strong>'+workspace.catalog.skills.length+'</strong> 个已登记 · <strong>'+workspace.unregistered.length+'</strong> 个待同步<br>'+escapeHtml(workspace.sourceDir);
+  const sourcePath=workspace.sourceDir||'';
+  summary.innerHTML='<strong>'+workspace.catalog.skills.length+'</strong> 个已登记 · <strong>'+workspace.unregistered.length+'</strong> 个待同步';
+  sourcePathText.textContent=sourcePath||'未配置源路径';
+  sourcePathText.title=sourcePath;
   categoryList.innerHTML=['<button data-category="" class="'+(currentCategory===''?'active':'')+'">全部分类</button>']
     .concat(cats.map((category)=>'<button data-category="'+escapeHtml(category.id)+'" class="'+(currentCategory===category.id?'active':'')+'">'+escapeHtml(category.name)+' · '+category.skillIds.length+'</button>'))
     .concat(workspace.uncategorized.length?['<button data-category="__uncategorized__" class="'+(currentCategory==='__uncategorized__'?'active':'')+'">未分类 · '+workspace.uncategorized.length+'</button>']:[])
@@ -270,11 +295,25 @@ function render(){
     document.querySelector('#syncList').innerHTML=workspace.unregistered.map((skill)=>'<label><input type="checkbox" name="syncSkill" value="'+escapeHtml(skill.id)+'" checked><span><span class="sync-name">'+escapeHtml(skill.name)+'</span><span class="sync-desc" title="'+escapeHtml(skill.description)+'">'+escapeHtml(skill.description)+'</span></span></label>').join('');
   }
   const skills=visibleSkills();
+  const visibleIds=new Set(skills.map((skill)=>skill.id));
+  for(const id of [...selectedCatalogSkills]){
+    if(!visibleIds.has(id))selectedCatalogSkills.delete(id);
+  }
+  document.querySelector('#resultCount').innerHTML='匹配 <strong>'+skills.length+'</strong> · 共 <strong>'+workspace.catalog.skills.length+'</strong>';
+  const selectedCount=[...selectedCatalogSkills].length;
+  const allVisibleSelected=skills.length>0&&skills.every((skill)=>selectedCatalogSkills.has(skill.id));
+  document.querySelector('#selectVisibleCatalogButton').textContent=allVisibleSelected
+    ?'取消全选 ('+selectedCount+')'
+    :selectedCount>0?'全选当前结果 · 已选 '+selectedCount:'全选当前结果';
+  document.querySelector('#catalogBulkActions').hidden=selectedCount===0;
   if(skills.length===0){grid.innerHTML='<div class="empty">没有符合条件的配置项</div>';return}
   grid.innerHTML=skills.map((skill)=>{
     const category=categoryOf(skill.id);
     const options=cats.map((item)=>'<option value="'+escapeHtml(item.id)+'" '+(item.id===category?.id?'selected':'')+'>'+escapeHtml(item.name)+'</option>').join('');
-    return '<article class="card clickable" data-skill-detail="'+escapeHtml(skill.id)+'" tabindex="0"><div class="card-head"><div class="name">'+escapeHtml(skill.name)+'</div><button type="button" class="strategy-toggle '+(skill.enabled?'on':'off')+'" data-enable="'+escapeHtml(skill.id)+'" title="'+(skill.enabled?'下次安装会包含此 Skill，点击改为跳过':'下次安装会跳过此 Skill，点击改为启用')+'">'+(skill.enabled?'安装：启用':'安装：跳过')+'</button></div><div class="badges"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span></div><p class="description" contenteditable="true" data-desc="'+escapeHtml(skill.id)+'" data-origin="'+escapeHtml(skill.description)+'">'+escapeHtml(skill.description)+'</p><p class="path">'+escapeHtml(skill.source)+' · '+escapeHtml(skill.package)+'</p><div class="actions"><select data-move="'+escapeHtml(skill.id)+'" title="所属分类"><option value="" '+(!category?'selected':'')+'>未分类</option>'+options+'</select><button class="disable" data-remove="'+escapeHtml(skill.id)+'" title="仅删除目录登记，不删源目录文件；之后可再同步回来">删除</button></div></article>';
+    const checked=selectedCatalogSkills.has(skill.id)?' checked':'';
+    const selectBox='<label class="skill-select"><input type="checkbox" data-select-catalog="'+escapeHtml(skill.id)+'"'+checked+' aria-label="选择 '+escapeHtml(skill.name)+'"></label>';
+    const categorySelect='<select class="card-category" data-move="'+escapeHtml(skill.id)+'" title="所属分类"><option value="" '+(!category?'selected':'')+'>未分类</option>'+options+'</select>';
+    return '<article class="card" data-skill-detail="'+escapeHtml(skill.id)+'"><div class="card-head"><div class="skill-title">'+selectBox+'<div class="skill-meta"><div class="name" data-toggle-select="'+escapeHtml(skill.id)+'">'+escapeHtml(skill.name)+'</div>'+categorySelect+'</div></div></div><p class="description" data-open-detail="'+escapeHtml(skill.id)+'" title="'+escapeHtml(skill.description)+'"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span> '+escapeHtml(skill.description)+'</p><p class="path">'+escapeHtml(skill.source)+' · '+escapeHtml(skill.package)+'</p></article>';
   }).join('');
 }
 
@@ -346,47 +385,93 @@ document.querySelector('#syncButton').addEventListener('click',async()=>{
   if(skillIds.length===0){showNotice('请选择要同步的 Skill');return}
   await mutate('/api/catalog/sync',{method:'POST',body:JSON.stringify({categoryId:document.querySelector('#syncCategory').value,skillIds})},'已同步到配置表');
 });
-async function saveDescription(field){
-  const description=field.innerText.trim();
-  if(!description||description===field.dataset.origin)return;
-  await mutate('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:field.dataset.desc,description})},'已保存描述');
+function toggleCatalogSelection(skillId){
+  if(!skillId)return;
+  if(selectedCatalogSkills.has(skillId))selectedCatalogSkills.delete(skillId);
+  else selectedCatalogSkills.add(skillId);
+  render();
 }
-grid.addEventListener('focusout',async(event)=>{
-  const field=event.target.closest('.description[data-desc]');
-  if(field) await saveDescription(field);
+grid.addEventListener('change',(event)=>{
+  const input=event.target.closest('input[data-select-catalog]');
+  if(!input)return;
+  if(input.checked)selectedCatalogSkills.add(input.dataset.selectCatalog);
+  else selectedCatalogSkills.delete(input.dataset.selectCatalog);
+  render();
 });
-grid.addEventListener('keydown',(event)=>{
-  const field=event.target.closest('.description[data-desc]');
-  if(!field||event.key!=='Enter'||event.shiftKey)return;
-  event.preventDefault();
-  field.blur();
-});
-grid.addEventListener('click',async(event)=>{
-  const enable=event.target.closest('button[data-enable]');
-  const remove=event.target.closest('button[data-remove]');
-  if(enable){
-    const skill=workspace.catalog.skills.find((item)=>item.id===enable.dataset.enable);
-    await mutate('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:skill.id,enabled:!skill.enabled})},skill.enabled?'已设为安装时跳过':'已设为安装时启用');
-  }
-  if(remove){
-    const skill=workspace.catalog.skills.find((item)=>item.id===remove.dataset.remove);
-    askConfirmation({
-      title:'删除 Skill',
-      message:'从目录删除后不再参与安装，但不会删除源文件。',
-      detail:(skill?.name||remove.dataset.remove)+' · '+(skill?.source||''),
-      action:()=>mutate('/api/catalog/skills?id='+encodeURIComponent(remove.dataset.remove),{method:'DELETE'},'已从目录删除'),
-    });
+grid.addEventListener('click',(event)=>{
+  if(event.target.closest('input[data-select-catalog],label.skill-select,select[data-move]'))return;
+  const title=event.target.closest('[data-toggle-select]');
+  if(title){
+    toggleCatalogSelection(title.dataset.toggleSelect);
     return;
   }
-  const card=event.target.closest('[data-skill-detail]');
-  if(card&&!event.target.closest('button,select,[contenteditable]'))location.href='/catalog/skill?id='+encodeURIComponent(card.dataset.skillDetail);
+  const detail=event.target.closest('[data-open-detail]');
+  if(detail)location.href='/catalog/skill?id='+encodeURIComponent(detail.dataset.openDetail);
 });
 grid.addEventListener('keydown',(event)=>{
-  const card=event.target.closest('[data-skill-detail]');
-  if(card&&!event.target.closest('button,select,[contenteditable]')&&(event.key==='Enter'||event.key===' ')){
+  const detail=event.target.closest('[data-open-detail]');
+  if(detail&&(event.key==='Enter'||event.key===' ')){
     event.preventDefault();
-    location.href='/catalog/skill?id='+encodeURIComponent(card.dataset.skillDetail);
+    detail.click();
   }
+});
+document.querySelector('#selectVisibleCatalogButton').addEventListener('click',()=>{
+  const skills=visibleSkills();
+  const allSelected=skills.length>0&&skills.every((skill)=>selectedCatalogSkills.has(skill.id));
+  for(const skill of skills){
+    if(allSelected)selectedCatalogSkills.delete(skill.id);
+    else selectedCatalogSkills.add(skill.id);
+  }
+  render();
+});
+function selectedVisibleCatalogSkills(){
+  return visibleSkills().filter((skill)=>selectedCatalogSkills.has(skill.id));
+}
+async function setSelectedCatalogEnabled(enabled){
+  const skills=selectedVisibleCatalogSkills().filter((skill)=>skill.enabled!==enabled);
+  if(skills.length===0||isUpdating){
+    if(!isUpdating)showNotice(enabled?'请先选择可设为安装启用的 Skill':'请先选择可设为安装跳过的 Skill');
+    return;
+  }
+  isUpdating=true;
+  try{
+    let last=null;
+    for(const skill of skills){
+      last=await request('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:skill.id,enabled})});
+    }
+    if(last)workspace=last;
+    showNotice((enabled?'已设为安装启用 ':'已设为安装跳过 ')+skills.length+' 个 Skill',true);
+    render();
+  }catch(error){
+    showNotice(error instanceof Error?error.message:'批量更新安装策略失败');
+  }finally{isUpdating=false}
+}
+document.querySelector('#enableSelectedCatalogButton').addEventListener('click',()=>void setSelectedCatalogEnabled(true));
+document.querySelector('#skipSelectedCatalogButton').addEventListener('click',()=>void setSelectedCatalogEnabled(false));
+document.querySelector('#deleteSelectedCatalogButton').addEventListener('click',()=>{
+  const skills=selectedVisibleCatalogSkills();
+  if(skills.length===0||isUpdating){if(skills.length===0)showNotice('请先选择要删除的 Skill');return}
+  const names=skills.slice(0,8).map((skill)=>skill.name).join('、');
+  askConfirmation({
+    title:'删除所选 Skill',
+    message:'从目录删除后不再参与安装，但不会删除源文件。',
+    detail:names+(skills.length>8?' 等 '+skills.length+' 个':''),
+    action:async()=>{
+      isUpdating=true;
+      try{
+        let last=null;
+        for(const skill of skills){
+          last=await request('/api/catalog/skills?id='+encodeURIComponent(skill.id),{method:'DELETE'});
+          selectedCatalogSkills.delete(skill.id);
+        }
+        if(last)workspace=last;
+        showNotice('已从目录删除 '+skills.length+' 个 Skill',true);
+        render();
+      }catch(error){
+        showNotice(error instanceof Error?error.message:'批量删除失败');
+      }finally{isUpdating=false}
+    },
+  });
 });
 document.querySelector('#confirmActionButton').addEventListener('click',async()=>{
   const action=confirmAction;
@@ -399,7 +484,7 @@ grid.addEventListener('change',async(event)=>{
   if(!select)return;
   await mutate('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:select.dataset.move,categoryId:select.value})},'已更新分类');
 });
-[search,enabledFilter,typeFilter].forEach((element)=>element.addEventListener('input',render));
+[search,enabledFilter,typeFilter,categoryScope].forEach((element)=>element.addEventListener('input',render));
 async function startPage(){
   const configStatus=await setupInitialization(()=>loadWorkspace());
   if(configStatus.initialized)await loadWorkspace();

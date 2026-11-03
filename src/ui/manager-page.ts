@@ -170,13 +170,20 @@ export const MANAGER_PAGE = `<!doctype html>
       <div class="list" id="agentList"></div>
     </aside>
     <section class="catalog-main">
-      <div class="toolbar installed-toolbar">
-        <input id="search" placeholder="搜索 Skill">
-        <select id="status"><option value="">全部状态</option><option value="on">已启用</option><option value="off">未启用</option><option value="broken">已失效</option></select>
-        <select id="installModeFilter"><option value="">全部方式</option><option value="symlink">软链</option><option value="copy">复制</option></select>
-        <button type="button" class="ghost" id="selectVisibleSkillsButton">全选当前结果</button>
-        <button type="button" class="danger" id="deleteSelectedButton">删除所选</button>
-        <button type="button" id="installButton" disabled>安装</button>
+      <div class="toolbar-stack">
+        <div class="toolbar toolbar-filters">
+          <input class="toolbar-search" id="search" placeholder="搜索 Skill">
+          <select id="status"><option value="">全部状态</option><option value="on">已启用</option><option value="off">未启用</option><option value="broken">已失效</option></select>
+          <select id="installModeFilter"><option value="">全部方式</option><option value="symlink">软链</option><option value="copy">复制</option></select>
+          <span class="result-count" id="resultCount">匹配 <strong>0</strong> · 共 <strong>0</strong></span>
+          <button type="button" class="ghost" id="selectVisibleSkillsButton">全选当前结果</button>
+          <button type="button" id="installButton" disabled>安装</button>
+        </div>
+        <div class="toolbar toolbar-actions" id="installedBulkActions" hidden>
+          <button type="button" class="positive" id="enableSelectedButton">启用所选</button>
+          <button type="button" class="disable" id="disableSelectedButton">禁用所选</button>
+          <button type="button" class="danger" id="deleteSelectedButton">删除所选</button>
+        </div>
       </div>
       <div class="catalog-scroll">
         <section class="grid" id="grid"><div class="empty">正在读取本机 Skill…</div></section>
@@ -388,9 +395,15 @@ function renderSkills(resetScroll=false){
   for(const id of [...selectedInstalledSkills]){
     if(!skills.some((skill)=>skill.id===id))selectedInstalledSkills.delete(id);
   }
+  const selectedCount=[...selectedInstalledSkills].length;
   const allVisibleSelected=skills.length>0&&skills.every((skill)=>selectedInstalledSkills.has(skill.id));
-  document.querySelector('#selectVisibleSkillsButton').textContent=allVisibleSelected?'取消全选':'全选当前结果';
+  document.querySelector('#selectVisibleSkillsButton').textContent=allVisibleSelected
+    ?'取消全选 ('+selectedCount+')'
+    :selectedCount>0?'全选当前结果 · 已选 '+selectedCount:'全选当前结果';
+  document.querySelector('#installedBulkActions').hidden=selectedCount===0;
   const agent=selectedAgent();
+  const agentSkillTotal=agentSkills().length;
+  document.querySelector('#resultCount').innerHTML='匹配 <strong>'+skills.length+'</strong> · 共 <strong>'+agentSkillTotal+'</strong>';
   const detectedCount=visibleAgents().filter((item)=>item.detected).length;
   const enabledCount=workspace.skills.filter((skill)=>skill.isEnabled).length;
   summary.innerHTML=escapeHtml(currentWorkspace)+'<br><strong>'+detectedCount+'</strong> 个已检测到 Agent · <strong>'+workspace.skills.length+'</strong> 个已安装 · <strong>'+enabledCount+'</strong> 个启用';
@@ -401,21 +414,18 @@ function renderSkills(resetScroll=false){
   grid.innerHTML=skills.map((skill)=>{
     const installedPath=abbreviateSkillPath(skill.installedPath,currentWorkspace,homeRoot);
     const linkTarget=skill.linkTarget?abbreviateSkillPath(skill.linkTarget,currentWorkspace,homeRoot):'';
-    const statusBadge=skill.isBroken?'<span class="badge broken">软链损坏</span>':'<span class="badge '+(skill.isEnabled?'on':'off')+'">'+(skill.isEnabled?'已启用':'未启用')+'</span>';
+    const modeBadge='<span class="badge '+(skill.isBroken?'broken':(skill.isSymlink?'symlink':'copy'))+'">'+(skill.isBroken?'软链损坏':(skill.isSymlink?'软链':'复制'))+'</span>';
+    const disabledClass=!skill.isBroken&&!skill.isEnabled?' is-disabled':'';
     const selected=selectedInstalledSkills.has(skill.id)?' checked':'';
     const selectBox='<label class="skill-select"><input type="checkbox" data-select-skill="'+escapeHtml(skill.id)+'"'+selected+' aria-label="选择 '+escapeHtml(skill.name)+'"></label>';
-    const toggle=skill.isBroken?'':'<button class="'+(skill.isEnabled?'disable':'')+'" data-id="'+escapeHtml(skill.id)+'">'+(skill.isEnabled?'禁用':'启用')+'</button>';
     const restore=skill.isBroken?'<button type="button" data-restore-skill="'+escapeHtml(skill.id)+'">恢复</button>':'';
-    const action='<div class="actions">'+toggle+restore+'<button class="danger" data-delete-skill="'+escapeHtml(skill.id)+'">删除</button></div>';
     return \`
-    <article class="card \${skill.isBroken?'':'clickable'}" \${skill.isBroken?'':'data-installed-skill="'+escapeHtml(skill.id)+'" tabindex="0"'}>
-      <div class="card-head"><div class="skill-title">\${selectBox}<div class="name">\${escapeHtml(skill.name)}</div></div>\${statusBadge}</div>
-      <div class="badges">\${skill.target==='agents'?'':'<span class="badge '+escapeHtml(skill.target)+'">'+escapeHtml(skill.target)+'</span>'}<span class="badge \${skill.isSymlink?'symlink':'copy'}">\${skill.isBroken?'软链损坏':(skill.isSymlink?'软链':'复制')}</span></div>
-      <p class="description readonly" title="\${escapeHtml(skill.description)}">\${escapeHtml(skill.description)}</p>
-      \${skill.isBroken?'<p class="symlink-note">源目录不存在或无法访问，删除只会移除这条损坏链接。</p>':(skill.isSymlink?'<p class="symlink-note">切换会改软链源，并影响同源链接</p>':'')}
+    <article class="card\${disabledClass}" data-installed-skill="\${escapeHtml(skill.id)}">
+      <div class="card-head"><div class="skill-title">\${selectBox}<div class="skill-meta"><div class="name" data-toggle-select="\${escapeHtml(skill.id)}">\${escapeHtml(skill.name)}</div>\${modeBadge}</div></div></div>
+      <p class="description readonly" data-open-detail="\${escapeHtml(skill.id)}" title="\${escapeHtml(skill.description)}">\${escapeHtml(skill.description)}</p>
       <p class="path" title="\${escapeHtml(skill.installedPath)}">\${escapeHtml(installedPath)}</p>
-      \${skill.linkTarget?'<p class="path" title="'+escapeHtml(skill.linkTarget)+'">'+(skill.isBroken?'指向 ':'来源 ')+escapeHtml(linkTarget)+'</p>':''}
-      \${action}
+      \${skill.isBroken&&skill.linkTarget?'<p class="path" title="'+escapeHtml(skill.linkTarget)+'">指向 '+escapeHtml(linkTarget)+'</p>':''}
+      \${restore}
     </article>\`;
   }).join('');
   if(resetScroll)catalogScroll.scrollTop=0;
@@ -528,6 +538,12 @@ agentList.addEventListener('click',(event)=>{
   render(true);
 });
 
+function toggleInstalledSelection(skillId){
+  if(!skillId)return;
+  if(selectedInstalledSkills.has(skillId))selectedInstalledSkills.delete(skillId);
+  else selectedInstalledSkills.add(skillId);
+  renderSkills(false);
+}
 grid.addEventListener('change',(event)=>{
   const input=event.target.closest('input[data-select-skill]');
   if(!input)return;
@@ -547,50 +563,22 @@ grid.addEventListener('click',async(event)=>{
     document.querySelector('#restoreDialog').showModal();
     return;
   }
-  const remove=event.target.closest('button[data-delete-skill]');
-  if(remove){
-    const skill=workspace.skills.find((item)=>item.id===remove.dataset.deleteSkill);
-    if(!skill||isUpdating)return;
-    const removalMessage=skill.isBroken
-      ?'将删除这条损坏的 Skill 软链。已丢失的源目录不会被改动。'
-      :skill.isSymlink
-        ?'将从当前 Workspace 删除这条 Skill 软链，源目录会保留。'
-        :'将删除当前 Workspace 中这份 Skill 副本，不影响配置表来源。';
-    askConfirmation({
-      title:'删除 '+skill.name,
-      message:removalMessage,
-      detail:'Workspace：'+currentWorkspace+'\\nAgent：'+skill.target+'\\n路径：'+(skill.installedPath||'')+(skill.linkTarget?' → '+skill.linkTarget:''),
-      action:()=>removeSkill(skill),
-    });
+  const title=event.target.closest('[data-toggle-select]');
+  if(title){
+    toggleInstalledSelection(title.dataset.toggleSelect);
     return;
   }
-  const button=event.target.closest('button[data-id]');
-  if(button){
-    if(isUpdating)return;
-    const skill=workspace.skills.find((item)=>item.id===button.dataset.id);
-    if(!skill)return;
-    if(skill.isSymlink&&!confirm('这是软链 Skill，切换会修改源目录并影响其他同源链接。继续吗？'))return;
-    isUpdating=true;button.disabled=true;
-    try{
-      applyWorkspace(await request('/api/skills/toggle',{method:'PATCH',body:JSON.stringify({workspace:currentWorkspace,target:skill.target,relativeDir:skill.relativeDir,isEnabled:!skill.isEnabled})}));
-      clearNotice();
-      render(false);
-    }catch(error){
-      showNotice(error instanceof Error?error.message:'切换失败');
-    }finally{isUpdating=false;button.disabled=false}
-    return;
-  }
-  const card=event.target.closest('[data-installed-skill]');
-  if(!card||event.target.closest('button,input,label'))return;
-  const skill=workspace.skills.find((item)=>item.id===card.dataset.installedSkill);
+  const detail=event.target.closest('[data-open-detail]');
+  if(!detail)return;
+  const skill=workspace.skills.find((item)=>item.id===detail.dataset.openDetail);
   if(!skill||skill.isBroken)return;
   location.href='/skill?from=installed&workspace='+encodeURIComponent(currentWorkspace)+'&target='+encodeURIComponent(skill.target)+'&relativeDir='+encodeURIComponent(skill.relativeDir);
 });
 grid.addEventListener('keydown',(event)=>{
-  const card=event.target.closest('[data-installed-skill]');
-  if(card&&!event.target.closest('button,input,label')&&(event.key==='Enter'||event.key===' ')){
+  const detail=event.target.closest('[data-open-detail]');
+  if(detail&&(event.key==='Enter'||event.key===' ')){
     event.preventDefault();
-    card.click();
+    detail.click();
   }
 });
 
@@ -795,8 +783,34 @@ document.querySelector('#selectVisibleSkillsButton').addEventListener('click',()
   }
   renderSkills(false);
 });
+function selectedVisibleInstalledSkills(){
+  return visibleInstalledSkills().filter((skill)=>selectedInstalledSkills.has(skill.id));
+}
+document.querySelector('#enableSelectedButton').addEventListener('click',()=>void setSelectedSkillsEnabled(true));
+document.querySelector('#disableSelectedButton').addEventListener('click',()=>void setSelectedSkillsEnabled(false));
+async function setSelectedSkillsEnabled(isEnabled){
+  const skills=selectedVisibleInstalledSkills().filter((skill)=>!skill.isBroken&&skill.isEnabled!==isEnabled);
+  if(skills.length===0||isUpdating){
+    if(!isUpdating)showNotice(isEnabled?'请先选择可启用的 Skill':'请先选择可禁用的 Skill');
+    return;
+  }
+  const hasSymlink=skills.some((skill)=>skill.isSymlink);
+  if(hasSymlink&&!confirm('选中项包含软链 Skill，切换会修改源目录并可能影响其他同源链接。继续吗？'))return;
+  isUpdating=true;
+  try{
+    let last=null;
+    for(const skill of skills){
+      last=await request('/api/skills/toggle',{method:'PATCH',body:JSON.stringify({workspace:currentWorkspace,target:skill.target,relativeDir:skill.relativeDir,isEnabled})});
+    }
+    if(last)applyWorkspace(last);
+    showNotice((isEnabled?'已启用 ':'已禁用 ')+skills.length+' 个 Skill',true);
+    render(false);
+  }catch(error){
+    showNotice(error instanceof Error?error.message:(isEnabled?'批量启用失败':'批量禁用失败'));
+  }finally{isUpdating=false;render(false)}
+}
 document.querySelector('#deleteSelectedButton').addEventListener('click',()=>{
-  const skills=visibleInstalledSkills().filter((skill)=>selectedInstalledSkills.has(skill.id));
+  const skills=selectedVisibleInstalledSkills();
   if(skills.length===0||isUpdating){if(skills.length===0)showNotice('请先选择要删除的 Skill');return}
   const names=skills.slice(0,8).map((skill)=>skill.name).join('、');
   askConfirmation({
@@ -820,17 +834,6 @@ async function removeSelectedSkills(skills){
     render(false);
   }catch(error){
     showNotice(error instanceof Error?error.message:'批量删除失败');
-  }finally{isUpdating=false;render(false)}
-}
-async function removeSkill(skill){
-  if(!currentWorkspace||!skill||isUpdating)return;
-  isUpdating=true;
-  try{
-    applyWorkspace(await request('/api/skills',{method:'DELETE',body:JSON.stringify({workspace:currentWorkspace,target:skill.target,relativeDir:skill.relativeDir})}));
-    clearNotice();
-    render(false);
-  }catch(error){
-    showNotice(error instanceof Error?error.message:'Skill 删除失败');
   }finally{isUpdating=false;render(false)}
 }
 

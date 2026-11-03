@@ -37,7 +37,13 @@ test('安装管理页把新增与安装操作放在各自上下文中', () => {
   assert.doesNotMatch(MANAGER_PAGE, /id="workspaceSelect"/);
   assert.match(MANAGER_PAGE, /class="workspace-bar"[\s\S]*id="addWorkspaceButton"[\s\S]*<\/div>/);
   assert.match(MANAGER_PAGE, /class="panel-heading"[\s\S]*id="addAgentButton"[\s\S]*<\/div>/);
-  assert.match(MANAGER_PAGE, /class="toolbar installed-toolbar"[\s\S]*id="installButton"[\s\S]*<\/div>/);
+  assert.match(MANAGER_PAGE, /class="toolbar toolbar-filters"[\s\S]*id="installButton"/);
+  assert.match(MANAGER_PAGE, /class="toolbar-search"/);
+  assert.match(MANAGER_PAGE, /id="installedBulkActions" hidden/);
+  assert.match(MANAGER_PAGE, /id="resultCount"/);
+  assert.match(MANAGER_PAGE, /id="enableSelectedButton"/);
+  assert.match(MANAGER_PAGE, /id="disableSelectedButton"/);
+  assert.match(MANAGER_PAGE, /已选 /);
   assert.match(MANAGER_PAGE, /<dialog id="installDialog"/);
   assert.match(MANAGER_PAGE, /id="installLog"/);
   assert.match(MANAGER_PAGE, /streamInstall\(/);
@@ -60,7 +66,10 @@ test('标题栏组合品牌与安装、源导航', () => {
   }
   assert.match(MANAGER_PAGE, /管理 Workspace、Agent 目录与已安装 Skill/);
   assert.match(CATALOG_PAGE, /维护 Skill 来源、分类与安装策略/);
-  assert.match(CATALOG_PAGE, /id="initConfigButton">路径配置<\/button>/);
+  assert.match(CATALOG_PAGE, /id="initConfigButton"[^>]*aria-label="路径配置"/);
+  assert.match(CATALOG_PAGE, /class="path-config-icon"/);
+  assert.match(CATALOG_PAGE, /id="sourcePathText"/);
+  assert.doesNotMatch(CATALOG_PAGE, />路径配置<\/button>/);
   assert.doesNotMatch(MANAGER_PAGE, /id="initConfigButton"/);
 });
 
@@ -78,7 +87,8 @@ test('管理页使用全高弹性布局与暖白极简视觉', () => {
 test('窄屏卡片和操作栏允许内容收缩，避免横向溢出', () => {
   assert.match(MANAGER_STYLES, /\.card\{[^}]*min-width:0/);
   assert.match(MANAGER_STYLES, /\.actions>\*\{[^}]*min-width:0/);
-  assert.match(MANAGER_STYLES, /\.card>\.actions\{margin-top:auto\}/);
+  assert.match(MANAGER_STYLES, /\.card-category\{/);
+  assert.match(MANAGER_STYLES, /\.toolbar-search\{/);
 });
 
 test('安装管理页精简标题、按钮与搜索文案', () => {
@@ -143,10 +153,18 @@ test('安装页和 Skill 源页提供删除确认弹窗', () => {
   assert.match(CATALOG_PAGE, /<dialog id="confirmDialog"/);
 });
 
-test('Skill 源卡片只保留一个安装策略控件并通过弹窗新增分类', () => {
-  assert.doesNotMatch(CATALOG_PAGE, /安装启用/);
-  assert.doesNotMatch(CATALOG_PAGE, /安装跳过/);
-  assert.match(CATALOG_PAGE, /class="strategy-toggle/);
+test('Skill 源安装策略改由工具栏批量操作，卡片保留分类下拉', () => {
+  assert.doesNotMatch(CATALOG_PAGE, /class="strategy-toggle/);
+  assert.doesNotMatch(CATALOG_PAGE, /data-enable=/);
+  assert.doesNotMatch(CATALOG_PAGE, /data-remove=/);
+  assert.match(CATALOG_PAGE, /id="catalogBulkActions" hidden/);
+  assert.match(CATALOG_PAGE, /id="enableSelectedCatalogButton">设为安装启用<\/button>/);
+  assert.match(CATALOG_PAGE, /id="skipSelectedCatalogButton">设为安装跳过<\/button>/);
+  assert.match(CATALOG_PAGE, /id="deleteSelectedCatalogButton">删除所选<\/button>/);
+  assert.match(CATALOG_PAGE, /id="categoryScope"/);
+  assert.match(CATALOG_PAGE, /class="card-category"/);
+  assert.match(CATALOG_PAGE, /data-move=/);
+  assert.match(CATALOG_PAGE, /data-select-catalog=/);
   assert.match(CATALOG_PAGE, /id="addCategoryButton"/);
   assert.match(CATALOG_PAGE, /<dialog id="categoryDialog"/);
 });
@@ -171,7 +189,7 @@ test('待同步列表逐行展示名称与截断描述，复选框不被全局�
 
 test('目录删除文案不再使用移出', () => {
   assert.doesNotMatch(CATALOG_PAGE, /移出/);
-  assert.match(CATALOG_PAGE, />删除<\/button>/);
+  assert.match(CATALOG_PAGE, /id="deleteSelectedCatalogButton">删除所选<\/button>/);
 });
 
 test('下拉框统一箭头与右侧内容间距', () => {
@@ -180,24 +198,25 @@ test('下拉框统一箭头与右侧内容间距', () => {
   assert.match(MANAGER_STYLES, /select\{[^}]*background-position:right 12px center/);
 });
 
-test('Skill 卡片点击进入独立详情页', () => {
+test('Skill 卡片点击介绍进入详情，点击标题切换选中', () => {
   assert.match(CATALOG_PAGE, /data-skill-detail=/);
+  assert.match(CATALOG_PAGE, /data-open-detail=/);
+  assert.match(CATALOG_PAGE, /data-toggle-select=/);
   assert.match(CATALOG_PAGE, /location\.href='\/catalog\/skill\?id='/);
-  assert.match(
-    CATALOG_PAGE,
-    /grid\.addEventListener\('keydown',\(event\)=>\{\n\s{2}const card=event\.target\.closest\('\[data-skill-detail\]'\);\n\s{2}if\(card&&!event\.target\.closest\('button,select,\[contenteditable\]'\)/,
-  );
+  assert.match(CATALOG_PAGE, /closest\('\[data-open-detail\]'\)/);
+  assert.match(CATALOG_PAGE, /toggleCatalogSelection\(/);
+  assert.doesNotMatch(CATALOG_PAGE, /contenteditable="true"/);
 });
 
-test('安装管理卡片点击进入已落地 Skill 详情页', () => {
-  assert.match(MANAGER_PAGE, /class="card \$\{skill\.isBroken\?'':'clickable'\}"/);
+test('安装管理卡片点击介绍进入详情，点击标题切换选中', () => {
   assert.match(MANAGER_PAGE, /data-installed-skill=/);
+  assert.match(MANAGER_PAGE, /data-open-detail=/);
+  assert.match(MANAGER_PAGE, /data-toggle-select=/);
   assert.match(MANAGER_PAGE, /location\.href='\/skill\?from=installed/);
-  assert.match(MANAGER_PAGE, /closest\('button\[data-id\]'\)/);
-  assert.match(
-    MANAGER_PAGE,
-    /grid\.addEventListener\('keydown',\(event\)=>\{\n\s{2}const card=event\.target\.closest\('\[data-installed-skill\]'\);/,
-  );
+  assert.match(MANAGER_PAGE, /is-disabled/);
+  assert.match(MANAGER_PAGE, /toggleInstalledSelection\(/);
+  assert.doesNotMatch(MANAGER_PAGE, /closest\('button\[data-id\]'\)/);
+  assert.doesNotMatch(MANAGER_PAGE, /data-delete-skill=/);
 });
 
 test('安装成功后自动关闭弹窗，失败时保留日志', () => {
@@ -307,7 +326,10 @@ test('安装管理列表支持批量选择删除，并为损坏软链提供恢�
   assert.match(MANAGER_PAGE, /<option value="symlink">软链<\/option>/);
   assert.match(MANAGER_PAGE, /id="installModeFilter"[\s\S]*<option value="copy">复制<\/option>/);
   assert.match(MANAGER_PAGE, /id="selectVisibleSkillsButton"/);
+  assert.match(MANAGER_PAGE, /id="enableSelectedButton"/);
+  assert.match(MANAGER_PAGE, /id="disableSelectedButton"/);
   assert.match(MANAGER_PAGE, /id="deleteSelectedButton"/);
+  assert.match(MANAGER_PAGE, /匹配 <strong>/);
   assert.match(MANAGER_PAGE, /data-select-skill=/);
   assert.match(MANAGER_PAGE, /data-restore-skill=/);
   assert.match(MANAGER_PAGE, /\/api\/skills\/remove/);
@@ -330,13 +352,14 @@ test('路径输入框通过目录选择器填入，不直接提交', () => {
   assert.match(CATALOG_PAGE, /Skill 源（绝对路径或 git 地址）/);
 });
 
-test('安装管理列表允许单独删除健康、禁用和损坏的 Skill', () => {
+test('安装管理列表通过工具栏批量启停删除，损坏软链仍可恢复', () => {
   assert.match(MANAGER_PAGE, /skill\.isBroken/);
   assert.match(MANAGER_PAGE, /软链损坏/);
-  assert.match(MANAGER_PAGE, /data-delete-skill=/);
-  assert.match(MANAGER_PAGE, /removeSkill\(/);
-  assert.doesNotMatch(MANAGER_PAGE, /!skill\|\|!skill\.isBroken\|\|isUpdating/);
-  assert.match(MANAGER_PAGE, /method:'DELETE',body:JSON\.stringify\(\{workspace:currentWorkspace,target:skill\.target,relativeDir:skill\.relativeDir\}\)/);
+  assert.doesNotMatch(MANAGER_PAGE, /data-delete-skill=/);
+  assert.doesNotMatch(MANAGER_PAGE, /removeSkill\(/);
+  assert.match(MANAGER_PAGE, /setSelectedSkillsEnabled\(/);
+  assert.match(MANAGER_PAGE, /removeSelectedSkills\(/);
+  assert.match(MANAGER_PAGE, /data-restore-skill=/);
   assert.match(MANAGER_STYLES, /\.badge\.broken/);
 });
 
@@ -399,8 +422,13 @@ test('Skill 卡片路径优先显示 Workspace 相对路径并折叠过长路径
   );
 });
 
-test('agents target 的卡片不渲染重复 badge', () => {
-  assert.match(MANAGER_PAGE, /skill\.target==='agents'\?'':/);
+test('已安装卡片以置灰表示未启用，名称后展示软链或复制', () => {
+  assert.doesNotMatch(MANAGER_PAGE, /skill\.target==='agents'\?'':/);
+  assert.match(MANAGER_PAGE, /is-disabled/);
+  assert.match(MANAGER_PAGE, /skill\.isSymlink\?'symlink':'copy'/);
+  assert.match(MANAGER_PAGE, /软链损坏/);
+  assert.match(MANAGER_PAGE, /软链/);
+  assert.match(MANAGER_PAGE, /复制/);
 });
 
 test('轮询保留滚动位置，仅显式上下文变化时回顶', () => {
