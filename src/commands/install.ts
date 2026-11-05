@@ -10,7 +10,6 @@ import {
   resolveCatalogSkills,
   spawnExternalSkillAdd,
 } from '../core/catalog-install.js';
-import { syncWorkspaceProjectAfterChange } from '../core/workspace-bootstrap.js';
 import {
   defaultInstallMode,
   resolveInstallMode,
@@ -115,7 +114,6 @@ export default class Install extends Command {
       onLog: (line) => this.log(line),
       runExternalPrepare,
     });
-    syncWorkspaceProjectAfterChange(scopeRoot);
     for (const item of result.items) {
       this.log(`${item.target}/${item.skill}: ${item.status}`);
     }

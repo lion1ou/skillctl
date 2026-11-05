@@ -21,7 +21,6 @@ import {
   type SkillRecord,
 } from './skill-registry.js';
 import { getTarget, type TargetId } from './targets.js';
-import { mergeWorkspaceProjectInstalls } from './workspace-project.js';
 
 export interface CatalogInstallSelection {
   categoryIds?: string[];
@@ -226,7 +225,6 @@ export function distributePreparedSkills(input: {
     }
     writeInstallRecord(recordFile, record);
   }
-  mergeWorkspaceProjectInstalls(input.scopeRoot, input.targets);
   return items;
 }
 

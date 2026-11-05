@@ -19,7 +19,6 @@ import { toSshGitRemote } from './source-git.js';
 import {
   listMissingProjectSkills,
   readWorkspaceProject,
-  refreshWorkspaceProjectFile,
   resolveCatalogSkillIds,
   type WorkspaceProjectConfig,
 } from './workspace-project.js';
@@ -28,27 +27,6 @@ export interface WorkspaceBootstrapResult {
   config: CliConfig;
   project: WorkspaceProjectConfig | null;
   installed: CatalogInstallResult[];
-}
-
-/** 把本机 Workspace 的 pin/源信息同步进可提交的项目配置。 */
-export function syncWorkspaceProjectAfterChange(
-  workspaceRoot: string,
-  env: NodeJS.ProcessEnv = process.env,
-): WorkspaceProjectConfig | null {
-  const root = resolve(workspaceRoot);
-  const config = peekCliConfig(env);
-  if (!config) return readWorkspaceProject(root);
-  const workspace = config.workspaces.find((item) => item.path === root);
-  if (!workspace) {
-    return refreshWorkspaceProjectFile(root, {
-      pinnedTargetIds: readWorkspaceProject(root)?.pinnedTargetIds ?? [],
-      sourceRemote: config.sourceRemote,
-    });
-  }
-  return refreshWorkspaceProjectFile(root, {
-    pinnedTargetIds: workspace.pinnedTargetIds,
-    sourceRemote: config.sourceRemote,
-  });
 }
 
 /** 若本机未初始化且目录含项目配置，用 SSH 源完成 CLI 初始化。 */
@@ -91,7 +69,6 @@ export async function addAndBootstrapWorkspace(
     ? await installMissingSkillsFromProject(root, project, env, options.onLog)
     : [];
   const config = loadCliConfig(env);
-  syncWorkspaceProjectAfterChange(root, env);
   return {
     config,
     project: readWorkspaceProject(root),

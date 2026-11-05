@@ -39,7 +39,6 @@ import { htmlPageRenderer, type HtmlPageRenderer } from './telemetry.js';
 import {
   addAndBootstrapWorkspace,
   ensureCliInitializedFromProject,
-  syncWorkspaceProjectAfterChange,
 } from './workspace-bootstrap.js';
 import { pickDirectory, type DirectoryPickKind } from './workspace-picker.js';
 import { readWorkspaceProject } from './workspace-project.js';
@@ -265,7 +264,6 @@ async function routeInstalledApi(
       workspaceRoot: workspace,
       skills: readSkillRefs(input.skills),
     });
-    syncWorkspaceProjectAfterChange(workspace, env);
     sendJson(response, { ...outcome.workspace, results: outcome.results });
     return true;
   }
@@ -294,7 +292,6 @@ async function routeInstalledApi(
       target: input.target as TargetId,
       relativeDir: input.relativeDir,
     }));
-    syncWorkspaceProjectAfterChange(workspace, env);
     return true;
   }
   if (request.method === 'DELETE' && url.pathname === '/api/skills/agent') {
@@ -304,7 +301,6 @@ async function routeInstalledApi(
     getTarget(target);
     const removal = removeManagedAgentSkills({ workspaceRoot: workspace, target });
     setWorkspaceTargetPinned(workspace, target, false, env);
-    syncWorkspaceProjectAfterChange(workspace, env);
     sendJson(response, {
       ...scanInstalledWorkspace(workspace),
       removal: { removed: removal.removed, target },
@@ -345,7 +341,6 @@ async function routeInstalledApi(
           );
         },
       });
-      syncWorkspaceProjectAfterChange(workspace, env);
       emit({
         type: 'result',
         ...scanInstalledWorkspace(workspace),

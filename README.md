@@ -98,7 +98,7 @@ skill-ctl manage --port 4173 --no-open
 **Installed skills `/`**
 
 - Scans the user home directory by default, and can fill an absolute path from the native directory picker before adding a project Workspace. Each Workspace is scanned using the Agent-specific subdirectories; only Agents with skills or explicitly pinned by the user are shown. Adding or pinning an Agent creates its skills directory when missing.
-- Installs and management changes write a commit-friendly `.skillctl/workspace.json` under the Workspace root (SSH `sourceRemote`, pinned Agents, installed skills). Re-adding that directory restores pins and auto-installs missing skills. If the CLI is not initialized yet and the current directory has this file, its `sourceRemote` can complete source setup.
+- If a Workspace root already has `.skillctl/workspace.json`, adding that directory again restores pins and auto-installs missing skills. If the CLI is not initialized yet and the current directory has this file, its `sourceRemote` can complete source setup. Installs and management changes do not create the file.
 - The top-right Install button opens a category dialog and installs into the current Agent under the current Workspace. The enable/disable control on a card renames `SKILL.md` ↔ `SKILL.md.disable`.
 - Click a Skill card to open its detail page, which reads the landed `SKILL.md` in that Workspace/Agent (`SKILL.md.disable` when disabled). YAML frontmatter and Markdown body are shown separately. The enable/disable control does not open detail.
 - Removing a Workspace only removes the management entry; it never deletes project files. The user home Workspace cannot be removed.

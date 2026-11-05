@@ -6,7 +6,6 @@ import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from './brand.js';
 import type { CategoryRecord, SkillRecord } from './skill-registry.js';
 import { ensureGitSourceCheckout, isGitRemoteSource, toSshGitRemote } from './source-git.js';
 import { getTarget, type TargetId } from './targets.js';
-import { refreshWorkspaceProjectFile } from './workspace-project.js';
 
 export interface ManagedWorkspaceConfig {
   path: string;
@@ -192,10 +191,6 @@ export function setWorkspaceTargetPinned(
   }
   workspace.pinnedTargetIds = [...pinned].sort();
   writeCliConfig(config, env);
-  refreshWorkspaceProjectFile(path, {
-    pinnedTargetIds: workspace.pinnedTargetIds,
-    sourceRemote: config.sourceRemote,
-  });
   return config;
 }
 

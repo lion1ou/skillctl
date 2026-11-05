@@ -1,10 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { MANIFEST_FILE } from './brand.js';
-import { readInstallRecord } from './install-record.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import type { InstallMode } from './installer.js';
 import { toSshGitRemote } from './source-git.js';
-import { getTarget, TARGETS, type TargetId } from './targets.js';
+import { getTarget, type TargetId } from './targets.js';
 
 export { toSshGitRemote } from './source-git.js';
 
@@ -36,55 +34,6 @@ export function readWorkspaceProject(workspaceRoot: string): WorkspaceProjectCon
   return normalizeWorkspaceProject(raw);
 }
 
-/** 写入 Workspace 项目配置（SSH 源地址、pin 与已装 skill）。 */
-export function writeWorkspaceProject(
-  workspaceRoot: string,
-  config: WorkspaceProjectConfig,
-): void {
-  const file = workspaceProjectPath(workspaceRoot);
-  mkdirSync(dirname(file), { recursive: true });
-  const normalized = normalizeWorkspaceProject(config);
-  writeFileSync(file, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
-}
-
-/** 按本机 pin 与 target 安装记录刷新并写回项目配置。 */
-export function refreshWorkspaceProjectFile(
-  workspaceRoot: string,
-  options: {
-    pinnedTargetIds: TargetId[];
-    sourceRemote?: string;
-  },
-): WorkspaceProjectConfig {
-  const root = resolve(workspaceRoot);
-  const existing = readWorkspaceProject(root);
-  const sourceRemote = resolveProjectSourceRemote(existing?.sourceRemote, options.sourceRemote);
-  const pinnedTargetIds = [...new Set(options.pinnedTargetIds)].sort();
-  const targets: WorkspaceProjectConfig['targets'] = {};
-  const targetIds = new Set<TargetId>([
-    ...pinnedTargetIds,
-    ...TARGETS.map((target) => target.id).filter((id) =>
-      existsSync(join(root, getTarget(id).skillsDir))),
-  ]);
-  for (const targetId of [...targetIds].sort()) {
-    const target = getTarget(targetId);
-    const record = readInstallRecord(join(root, target.skillsDir, MANIFEST_FILE));
-    const skills = Object.keys(record.skills).sort();
-    if (skills.length === 0 && !pinnedTargetIds.includes(targetId)) continue;
-    const mode = skills.length > 0
-      ? record.skills[skills[0]!]?.mode ?? 'symlink'
-      : 'symlink';
-    targets[targetId] = { mode, skills };
-  }
-  const project: WorkspaceProjectConfig = {
-    version: 1,
-    pinnedTargetIds,
-    targets,
-    ...(sourceRemote ? { sourceRemote } : {}),
-  };
-  writeWorkspaceProject(root, project);
-  return project;
-}
-
 /** 从 catalog 里按 id 或 name 解析要安装的 skill id。 */
 export function resolveCatalogSkillIds(
   catalogSkills: Array<{ id: string; name: string }>,
@@ -114,48 +63,6 @@ export function listMissingProjectSkills(
       || existsSync(join(skillDir, 'SKILL.md.disable'))
     );
   });
-}
-
-/** 安装分发后把 target 安装记录合并进项目配置（保留已有 SSH 源与 pin）。 */
-export function mergeWorkspaceProjectInstalls(
-  workspaceRoot: string,
-  targetIds: TargetId[],
-): WorkspaceProjectConfig {
-  const root = resolve(workspaceRoot);
-  const existing = readWorkspaceProject(root) ?? {
-    version: 1 as const,
-    pinnedTargetIds: [] as TargetId[],
-    targets: {},
-  };
-  const targets: WorkspaceProjectConfig['targets'] = { ...existing.targets };
-  const pinned = new Set(existing.pinnedTargetIds);
-  for (const targetId of targetIds) {
-    const target = getTarget(targetId);
-    const record = readInstallRecord(join(root, target.skillsDir, MANIFEST_FILE));
-    const skills = Object.keys(record.skills).sort();
-    const mode = skills.length > 0
-      ? record.skills[skills[0]!]?.mode ?? 'symlink'
-      : targets[targetId]?.mode ?? 'symlink';
-    targets[targetId] = { mode, skills };
-    if (skills.length > 0) pinned.add(targetId);
-  }
-  const project: WorkspaceProjectConfig = {
-    version: 1,
-    pinnedTargetIds: [...pinned].sort(),
-    targets,
-    ...(existing.sourceRemote ? { sourceRemote: existing.sourceRemote } : {}),
-  };
-  writeWorkspaceProject(root, project);
-  return project;
-}
-
-function resolveProjectSourceRemote(
-  existing?: string,
-  fromCli?: string,
-): string | undefined {
-  const candidate = existing?.trim() || fromCli?.trim();
-  if (!candidate) return undefined;
-  return toSshGitRemote(candidate);
 }
 
 function normalizeWorkspaceProject(

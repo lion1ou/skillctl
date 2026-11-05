@@ -130,6 +130,7 @@ test('把所选分类安装到指定 Agent 的 skills 目录', async () => {
     assert.equal(lstatSync(join(repo.root, '.cursor/skills/alpha')).isSymbolicLink(), true);
     assert.equal(existsSync(join(repo.root, '.cursor/skills/beta')), false);
     assert.equal(existsSync(join(repo.root, '.cursor/skills', MANIFEST_FILE)), true);
+    assert.equal(existsSync(join(repo.root, '.skillctl')), false);
   } finally {
     repo.cleanup();
   }

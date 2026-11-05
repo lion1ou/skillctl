@@ -98,7 +98,7 @@ skill-ctl manage --port 4173 --no-open
 **安装管理 `/`**
 
 - 默认扫描用户根目录，也可通过系统目录选择器填入绝对路径后新增项目 Workspace。每个 Workspace 按 Agent 对应子目录扫描；只展示含 Skill 或用户主动固定的 Agent。新增/固定 Agent 时，若对应 skills 目录不存在会自动创建。
-- 安装或变更后会在 Workspace 根写入可提交的 `.skillctl/workspace.json`（含 SSH 源地址、固定 Agent、已装 Skill）。再次添加该目录时会按文件恢复 pin，并自动补装缺失 Skill；若本机尚未 init 且当前目录有该文件，可用其中的 `sourceRemote` 完成源配置。
+- 若 Workspace 根已有 `.skillctl/workspace.json`，再次添加该目录时会按文件恢复 pin，并自动补装缺失 Skill；若本机尚未 init 且当前目录有该文件，可用其中的 `sourceRemote` 完成源配置。安装和变更不会创建该文件。
 - 右上角「安装」打开分类安装弹窗，将所选分类安装到当前 Workspace 的当前 Agent。卡片上的启用/禁用会把 `SKILL.md` 与 `SKILL.md.disable` 互相改名。
 - 点击 Skill 卡片进入详情，读取该 Workspace/Agent 下已落地的 `SKILL.md`（禁用为 `SKILL.md.disable`）。YAML frontmatter 与 Markdown 正文分开展示。点击启用/禁用不会进入详情。
 - 删除 Workspace 只从管理列表移除，不删除项目文件；用户根目录不可删除。

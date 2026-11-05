@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.10 — 2026-11-05
+
+### Removed
+
+- 安装、固定 Agent 和其它管理变更不再在 Workspace 根生成 `.skillctl/workspace.json`。目录里已有该文件时，再次添加 Workspace 仍会按文件恢复 pin 并补装缺失 Skill。
+
 ## 1.2.9 — 2026-11-03
 
 ### Changed

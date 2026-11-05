@@ -187,6 +187,7 @@ test('可添加 Workspace 并为其固定要展示的 Agent，同时创建 skill
       { path: workspace, pinnedTargetIds: ['cursor'] },
     ]);
     assert.equal(existsSync(join(workspace, '.cursor/skills')), true);
+    assert.equal(existsSync(join(workspace, '.skillctl')), false);
   } finally {
     repo.cleanup();
   }
