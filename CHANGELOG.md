@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 — 2026-11-06
+
+### Added
+
+- 本机记录 Cursor 与 Codex 读取 skill 文件的次数，只写入 `~/.config/skillctl/usage.json`，不上传。
+- `skill-ctl hook install` 同时安装两边的读取 hook，并把 `skillctl-usage` 放到 `~/.agents/skills`。
+- 管理页新增「使用情况」，展示趋势、占比和每个 skill 的次数。详情页展示当前 skill 的次数和最近读取时间。
+- 同一次会话里的每次文件读取都计入。只统计 `skills/` 或 `skills-cursor/` 下带扩展名的具体文件；纯目录、未展开的变量、花括号和通配符不计。
+- 从详情返回安装管理或 Skill 源时，恢复搜索、筛选、选中项和滚动位置。
 
 ### Fixed
 

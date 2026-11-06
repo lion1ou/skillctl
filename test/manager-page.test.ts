@@ -5,6 +5,7 @@ import * as catalogPage from '../src/ui/catalog-page.js';
 import { MANAGER_STYLES } from '../src/ui/manager-chrome.js';
 import * as managerPage from '../src/ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../src/ui/skill-detail-page.js';
+import { USAGE_PAGE } from '../src/ui/usage-page.js';
 
 const { CATALOG_PAGE } = catalogPage;
 const {
@@ -23,6 +24,7 @@ test('页面内联脚本可以被解析，不会因为转义丢失而整段失�
     ['MANAGER_PAGE', MANAGER_PAGE],
     ['CATALOG_PAGE', CATALOG_PAGE],
     ['SKILL_DETAIL_PAGE', SKILL_DETAIL_PAGE],
+    ['USAGE_PAGE', USAGE_PAGE],
   ] as const) {
     const scripts = inlineScripts(page);
     assert.ok(scripts.length > 0, `${name} 缺少内联脚本`);
@@ -61,11 +63,22 @@ test('标题栏组合品牌与安装、源导航', () => {
     assert.match(page, /class="brand"[^>]*>[\s\S]*skill-ctl<span class="brand-version">v\d+\.\d+\.\d+<\/span><\/a>/);
     assert.match(page, />安装管理<\/a>/);
     assert.match(page, />Skill 源<\/a>/);
+    assert.match(page, />使用情况<\/a>/);
     assert.doesNotMatch(page, /class="app-header"/);
     assert.doesNotMatch(page, /class="tabs"/);
   }
   assert.match(MANAGER_PAGE, /管理 Workspace、Agent 目录与已安装 Skill/);
   assert.match(CATALOG_PAGE, /维护 Skill 来源、分类与安装策略/);
+  assert.match(MANAGER_PAGE, /saveInstalledListState\(\)/);
+  assert.match(MANAGER_PAGE, /skillctl:list-state:installed/);
+  assert.match(CATALOG_PAGE, /saveCatalogListState\(\)/);
+  assert.match(CATALOG_PAGE, /skillctl:list-state:catalog/);
+  assert.match(SKILL_DETAIL_PAGE, /id="usageCount"/);
+  assert.match(USAGE_PAGE, /id="installHookButton"/);
+  assert.match(USAGE_PAGE, /每次读取都会计入/);
+  assert.match(USAGE_PAGE, /id="codexHookState"/);
+  assert.match(USAGE_PAGE, /id="usageTrend"/);
+  assert.match(USAGE_PAGE, /id="usageShare"/);
   assert.match(CATALOG_PAGE, /id="initConfigButton"[^>]*aria-label="路径配置"/);
   assert.match(CATALOG_PAGE, /class="path-config-icon"/);
   assert.match(CATALOG_PAGE, /id="sourcePathText"/);

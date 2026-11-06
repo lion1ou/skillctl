@@ -192,7 +192,7 @@ pnpm test
 pnpm lint
 ```
 
-The published npm package contains only `bin/` and compiled `dist/`. Catalog sources are never bundled.
+The published npm package contains `bin/`, compiled `dist/`, and `skills/skillctl-usage`. Catalog sources are never bundled.
 
 Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish `@lion1ou/skill-ctl@1.2.0` yourself after committing:
 

@@ -4,6 +4,7 @@ import {
   renderInitializationDialog,
   renderManagerNav,
 } from './manager-chrome.js';
+import { catalogListStateKey, parseCatalogListState } from './list-state.js';
 
 /** 将 SKILL.md 的 YAML frontmatter 与 Markdown 正文分开。 */
 export function splitSkillDocument(content: string): { frontmatter: string; body: string } {
@@ -227,6 +228,10 @@ const categoryDialog=document.querySelector('#categoryDialog');
 const confirmDialog=document.querySelector('#confirmDialog');
 let confirmAction=null;
 let selectedCatalogSkills=new Set();
+const parseCatalogListState=${parseCatalogListState.toString()};
+const catalogListStateKey=${catalogListStateKey.toString()};
+let pendingCatalogState=null;
+try{pendingCatalogState=parseCatalogListState(sessionStorage.getItem(catalogListStateKey()));}catch(error){pendingCatalogState=null;console.error(error)}
 const escapeHtml=(value)=>String(value).replace(/[&<>"']/g,(char)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const sourcePathText=document.querySelector('#sourcePathText');
 
@@ -406,7 +411,10 @@ grid.addEventListener('click',(event)=>{
     return;
   }
   const detail=event.target.closest('[data-open-detail]');
-  if(detail)location.href='/catalog/skill?id='+encodeURIComponent(detail.dataset.openDetail);
+  if(detail){
+    saveCatalogListState();
+    location.href='/catalog/skill?id='+encodeURIComponent(detail.dataset.openDetail);
+  }
 });
 grid.addEventListener('keydown',(event)=>{
   const detail=event.target.closest('[data-open-detail]');
@@ -487,7 +495,32 @@ grid.addEventListener('change',async(event)=>{
 [search,enabledFilter,typeFilter,categoryScope].forEach((element)=>element.addEventListener('input',render));
 async function startPage(){
   const configStatus=await setupInitialization(()=>loadWorkspace());
-  if(configStatus.initialized)await loadWorkspace();
+  if(!configStatus.initialized)return;
+  if(pendingCatalogState){
+    currentCategory=pendingCatalogState.category||'';
+    search.value=pendingCatalogState.keyword||'';
+    enabledFilter.value=pendingCatalogState.enabled||'';
+    typeFilter.value=pendingCatalogState.type||'';
+    categoryScope.value=pendingCatalogState.scope||'';
+    selectedCatalogSkills=new Set(pendingCatalogState.selectedSkillIds||[]);
+  }
+  await loadWorkspace();
+  const scroll=document.querySelector('.catalog-scroll');
+  if(scroll&&pendingCatalogState?.scrollTop)scroll.scrollTop=pendingCatalogState.scrollTop;
+  sessionStorage.removeItem(catalogListStateKey());
+  pendingCatalogState=null;
+}
+function saveCatalogListState(){
+  const scroll=document.querySelector('.catalog-scroll');
+  sessionStorage.setItem(catalogListStateKey(),JSON.stringify({
+    category:currentCategory,
+    keyword:search.value,
+    enabled:enabledFilter.value,
+    type:typeFilter.value,
+    scope:categoryScope.value,
+    selectedSkillIds:[...selectedCatalogSkills],
+    scrollTop:scroll?scroll.scrollTop:0,
+  }));
 }
 void startPage();
 </script>

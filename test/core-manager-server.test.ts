@@ -5,6 +5,7 @@ import test from 'node:test';
 import { CATEGORIES_FILE, SKILLS_FILE } from '../src/core/brand.js';
 import { initializeCliConfig } from '../src/core/cli-config.js';
 import { startManagerServer } from '../src/core/manager-server.js';
+import { recordSkillRead } from '../src/core/skill-usage.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
 
 test('管理服务可添加 Workspace、扫描其中 Skill 并固定 Agent', async () => {
@@ -391,6 +392,52 @@ test('管理服务可删除 Workspace 中健康的单个 Skill', async () => {
     assert.deepEqual(after.skills.map((skill) => skill.name), ['keep']);
     assert.equal(existsSync(join(workspace, '.cursor/skills/remove')), false);
     assert.equal(existsSync(join(workspace, '.cursor/skills/keep/SKILL.md')), true);
+  } finally {
+    await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
+    repo.cleanup();
+  }
+});
+
+test('使用情况接口返回本机读取汇总，并可以安装 hook', async () => {
+  const repo = createTmpRepo('skillctl-usage-server-');
+  const env = {
+    HOME: repo.root,
+    XDG_CONFIG_HOME: join(repo.root, 'config'),
+  } as NodeJS.ProcessEnv;
+  recordSkillRead({
+    name: 'create-hook',
+    path: '/Users/me/.cursor/skills/create-hook/SKILL.md',
+    conversationId: 'conv-1',
+    env,
+    now: () => new Date('2026-11-06T03:20:39.000Z'),
+  });
+  const manager = await startManagerServer({ port: 0, env, pickWorkspace: async () => null });
+  try {
+    const html = await (await fetch(`${manager.url}/usage`)).text();
+    const token = html.match(/const token="([^"]+)"/)?.[1];
+    assert.ok(token);
+    assert.match(html, /使用情况/);
+    const summary = await (await fetch(`${manager.url}/api/usage`, {
+      headers: { 'x-skillctl-token': token },
+    })).json() as { readCount: number; skills: { name: string }[]; hookInstalled: boolean };
+    assert.equal(summary.readCount, 1);
+    assert.equal(summary.skills[0]?.name, 'create-hook');
+    assert.equal(summary.hookInstalled, false);
+    const one = await (await fetch(`${manager.url}/api/usage?name=create-hook`, {
+      headers: { 'x-skillctl-token': token },
+    })).json() as { skill: { readCount: number } };
+    assert.equal(one.skill.readCount, 1);
+    const installed = await (await fetch(`${manager.url}/api/usage/hook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-skillctl-token': token },
+      body: JSON.stringify({ action: 'install' }),
+    })).json() as { hookInstalled: boolean; codexHookInstalled: boolean; skillInstalled: boolean };
+    assert.equal(installed.hookInstalled, true);
+    assert.equal(installed.codexHookInstalled, true);
+    assert.equal(installed.skillInstalled, true);
+    assert.equal(existsSync(join(repo.root, '.cursor/hooks/skillctl-usage-record.mjs')), true);
+    assert.equal(existsSync(join(repo.root, '.codex/hooks.json')), true);
+    assert.equal(existsSync(join(repo.root, '.agents/skills/skillctl-usage/SKILL.md')), true);
   } finally {
     await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
     repo.cleanup();

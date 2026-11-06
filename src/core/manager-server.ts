@@ -45,6 +45,9 @@ import { readWorkspaceProject } from './workspace-project.js';
 import { CATALOG_PAGE } from '../ui/catalog-page.js';
 import { MANAGER_PAGE } from '../ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../ui/skill-detail-page.js';
+import { USAGE_PAGE } from '../ui/usage-page.js';
+import { installCursorUsageHook, readCursorUsageHookStatus, uninstallCursorUsageHook } from './cursor-usage-hook.js';
+import { readSkillUsage, readSkillUsageSummary } from './skill-usage.js';
 
 const UI_ASSET_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../ui/assets');
 
@@ -98,6 +101,10 @@ async function routeManagerRequest(
       sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
       return;
     }
+    if (request.method === 'GET' && url.pathname === '/usage') {
+      sendHtml(response, USAGE_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
+      return;
+    }
     if (request.method === 'GET' && (
       url.pathname === '/assets/skillctl-icon.png' || url.pathname === '/favicon.ico'
     )) {
@@ -111,6 +118,7 @@ async function routeManagerRequest(
     if (await routeConfigApi(request, response, url, options.env)) return;
     if (await routeWorkspaceApi(request, response, url, options)) return;
     if (await routeInstalledApi(request, response, url, options.env)) return;
+    if (await routeUsageApi(request, response, url, options.env)) return;
     if (await routeCatalogApi(request, response, url, options.env)) return;
     sendText(response, 404, 'Not Found');
   } catch (error) {
@@ -120,6 +128,48 @@ async function routeManagerRequest(
     }
     sendText(response, 400, error instanceof Error ? error.message : '请求处理失败');
   }
+}
+
+/** 提供本机 skill 读取汇总，并安装或卸载 Cursor 记录 hook。 */
+async function routeUsageApi(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  if (request.method === 'GET' && url.pathname === '/api/usage') {
+    const name = url.searchParams.get('name');
+    const homeDir = env.HOME;
+    sendJson(response, {
+      ...readSkillUsageSummary(env),
+      ...readCursorUsageHookStatus(homeDir),
+      skill: name ? readSkillUsage(name, env) : null,
+    });
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/usage/hook') {
+    const input = await readJson(request, 1024);
+    const action = readString(input.action, 'action');
+    const homeDir = env.HOME;
+    if (action === 'install') {
+      installCursorUsageHook({
+        homeDir,
+        nodePath: process.execPath,
+        cliEntry: process.argv[1],
+      });
+    } else if (action === 'uninstall') {
+      uninstallCursorUsageHook(homeDir);
+    } else {
+      throw new Error('action 必须是 install 或 uninstall');
+    }
+    sendJson(response, {
+      ...readSkillUsageSummary(env),
+      ...readCursorUsageHookStatus(homeDir),
+      skill: null,
+    });
+    return true;
+  }
+  return false;
 }
 
 /** 读取初始化状态，并允许管理页面完成首次配置或更新已有配置。 */

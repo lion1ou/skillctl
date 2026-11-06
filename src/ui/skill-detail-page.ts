@@ -48,6 +48,11 @@ export const SKILL_DETAIL_PAGE = `<!doctype html>
         <dt>路径</dt><dd id="installedPath"></dd>
         <dt id="installedSourceLabel" hidden>来源</dt><dd id="installedSource" hidden></dd>
       </dl>
+      <h2>读取记录</h2>
+      <dl>
+        <dt>次数</dt><dd id="usageCount">—</dd>
+        <dt>最近</dt><dd id="usageLast">—</dd>
+      </dl>
       <h2>源文件</h2>
       <p class="path detail-source-path" id="sourcePath"></p>
     </aside>
@@ -78,6 +83,20 @@ function showError(message){
   notice.textContent=message;
   notice.classList.add('show');
 }
+async function loadSkillUsage(name){
+  const count=document.querySelector('#usageCount');
+  const last=document.querySelector('#usageLast');
+  try{
+    const response=await fetch('/api/usage?name='+encodeURIComponent(name),{headers:{'x-skillctl-token':token}});
+    if(!response.ok)throw new Error(await response.text());
+    const data=await response.json();
+    count.textContent=data.skill?String(data.skill.readCount):'0';
+    last.textContent=data.skill?data.skill.lastReadAt:'还没有读取';
+  }catch(error){
+    count.textContent='—';
+    last.textContent=error instanceof Error?error.message:'读取记录失败';
+  }
+}
 async function loadDetail(){
   const params=new URLSearchParams(location.search);
   const fromInstalled=params.get('from')==='installed';
@@ -99,6 +118,7 @@ async function loadDetail(){
       const detail=await response.json();
       document.querySelector('#skillTitle').textContent=detail.skill.name;
       document.querySelector('#skillDescription').textContent=detail.skill.description;
+      void loadSkillUsage(detail.skill.name);
       document.querySelector('#installedId').textContent=detail.skill.id;
       document.querySelector('#installedTarget').textContent=detail.skill.target;
       document.querySelector('#installedEnabled').textContent=detail.skill.isEnabled?'已启用':'未启用';
@@ -131,6 +151,7 @@ async function loadDetail(){
     const detail=await response.json();
     document.querySelector('#skillTitle').textContent=detail.skill.name;
     document.querySelector('#skillDescription').textContent=detail.skill.description;
+    void loadSkillUsage(detail.skill.name);
     document.querySelector('#skillId').textContent=detail.skill.id;
     document.querySelector('#skillType').textContent=detail.skill.type;
     document.querySelector('#skillPackage').textContent=detail.skill.package;

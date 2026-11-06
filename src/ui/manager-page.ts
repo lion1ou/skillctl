@@ -1,4 +1,5 @@
 import { defaultInstallMode, supportsSymlinkInstall } from '../core/installer.js';
+import { installedListStateKey, parseInstalledListState } from './list-state.js';
 import {
   INITIALIZATION_SCRIPT,
   MANAGER_STYLES,
@@ -291,7 +292,11 @@ const abbreviateSkillPath=${abbreviateSkillPath.toString()};
 const visibleAgentsForWorkspace=${visibleAgentsForWorkspace.toString()};
 const groupInstallableSkills=${groupInstallableSkills.toString()};
 const matchesInstalledSkillFilter=${matchesInstalledSkillFilter.toString()};
+const parseInstalledListState=${parseInstalledListState.toString()};
+const installedListStateKey=${installedListStateKey.toString()};
 let selectedInstalledSkills=new Set();
+let pendingListState=null;
+try{pendingListState=parseInstalledListState(sessionStorage.getItem(installedListStateKey()));}catch(error){pendingListState=null;console.error(error)}
 let restoreTarget=null;
 
 function showNotice(message,ok=false){
@@ -502,10 +507,43 @@ async function loadCatalog(){
 
 async function loadManager(){
   manager=await request('/api/workspaces');
+  if(pendingListState&&manager.workspaces.some((item)=>item.path===pendingListState.workspace)){
+    currentWorkspace=pendingListState.workspace;
+    currentAgent=pendingListState.agent||'';
+    return;
+  }
+  pendingListState=null;
   if(!manager.workspaces.some((item)=>item.path===currentWorkspace)){
     currentWorkspace=manager.workspaces[0]?.path||'';
     currentAgent='';
   }
+}
+
+function applyPendingInstalledListState(){
+  if(!pendingListState)return;
+  search.value=pendingListState.keyword||'';
+  status.value=pendingListState.status||'';
+  installModeFilter.value=pendingListState.installMode||'';
+  selectedInstalledSkills=new Set(pendingListState.selectedSkillIds||[]);
+}
+
+function saveInstalledListState(){
+  const scroll=document.querySelector('.catalog-scroll');
+  sessionStorage.setItem(installedListStateKey(),JSON.stringify({
+    workspace:currentWorkspace,
+    agent:currentAgent,
+    keyword:search.value,
+    status:status.value,
+    installMode:installModeFilter.value,
+    selectedSkillIds:[...selectedInstalledSkills],
+    scrollTop:scroll?scroll.scrollTop:0,
+  }));
+}
+
+function restoreInstalledScroll(){
+  const top=pendingListState?.scrollTop||0;
+  const scroll=document.querySelector('.catalog-scroll');
+  if(scroll&&top>0)scroll.scrollTop=top;
 }
 
 async function loadSkills(showError=true,force=false,resetScroll=false){
@@ -572,6 +610,7 @@ grid.addEventListener('click',async(event)=>{
   if(!detail)return;
   const skill=workspace.skills.find((item)=>item.id===detail.dataset.openDetail);
   if(!skill||skill.isBroken)return;
+  saveInstalledListState();
   location.href='/skill?from=installed&workspace='+encodeURIComponent(currentWorkspace)+'&target='+encodeURIComponent(skill.target)+'&relativeDir='+encodeURIComponent(skill.relativeDir);
 });
 grid.addEventListener('keydown',(event)=>{
@@ -889,7 +928,11 @@ async function startPage(){
   });
   if(configStatus.initialized){
     await Promise.all([loadManager(),loadCatalog()]);
+    applyPendingInstalledListState();
     await loadSkills();
+    restoreInstalledScroll();
+    sessionStorage.removeItem(installedListStateKey());
+    pendingListState=null;
   }
 }
 void startPage();

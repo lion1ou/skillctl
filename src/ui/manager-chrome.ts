@@ -93,6 +93,9 @@ export const MANAGER_STYLES = `
     .init-form label{display:grid;gap:6px;margin:12px 0;color:#555A5D}.init-form label span{font-size:12px;color:var(--muted)}
     .init-form .config-path{margin-top:14px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
     .init-form .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.init-form .actions button{flex:0 0 auto}
+    .usage-metrics{display:flex;gap:10px;margin-bottom:14px}.usage-metric{flex:1}.usage-metric strong{display:block;margin-top:4px;font:500 28px/1.1 "Newsreader","Instrument Serif","Times New Roman",serif}
+    .usage-charts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);gap:14px;margin-bottom:14px}.usage-charts h2{margin:0 0 12px;font-size:14px}.usage-chart svg{width:100%;height:220px;display:block}.usage-share{display:flex;gap:16px;align-items:center}.usage-share svg{width:180px;height:180px;flex:none}.usage-legend{display:grid;gap:6px;min-width:0}.usage-legend span{display:flex;gap:8px;align-items:center;min-width:0;font-size:12px}.usage-legend em{margin-left:auto;color:var(--muted);font-style:normal}.usage-swatch{width:8px;height:8px;border-radius:2px;flex:none}
+    .usage-table{width:100%;border-collapse:collapse}.usage-table th,.usage-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.usage-table th{color:var(--muted);font-size:12px;font-weight:600}.usage-path{font:11px/1.45 "Geist Mono","SF Mono",monospace;color:var(--muted)}
     .sync{margin-bottom:14px}
     .sync-list{display:grid;gap:6px;max-height:228px;overflow:auto;margin:10px 0 0}
     .sync-list label{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:6px}
@@ -110,14 +113,16 @@ export const MANAGER_STYLES = `
       .layout{flex:none;min-height:auto}.layout>.panel{max-height:none;margin-bottom:14px;overflow:visible}
       .catalog-main{min-height:auto}.catalog-scroll{overflow:visible}
       .skill-detail-layout{display:block;overflow:visible}.detail-meta{margin-bottom:14px}.detail-document{overflow:visible}
+      .usage-charts,.usage-share{display:block}.usage-share svg{margin-bottom:12px}
     }
 `;
 
 /** 区分已安装 Skill 页和配置表页的主导航。 */
-export function renderManagerNav(active: 'installed' | 'catalog', version = PACKAGE_VERSION): string {
+export function renderManagerNav(active: 'installed' | 'catalog' | 'usage', version = PACKAGE_VERSION): string {
   const installed = active === 'installed' ? ' active' : '';
   const catalog = active === 'catalog' ? ' active' : '';
-  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl<span class="brand-version">v${escapeHtml(version)}</span></a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 源</a></div></nav>`;
+  const usage = active === 'usage' ? ' active' : '';
+  return `<nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/assets/skillctl-icon.png" alt="">skill-ctl<span class="brand-version">v${escapeHtml(version)}</span></a><div class="nav-links"><a class="nav-link${installed}" href="/">安装管理</a><a class="nav-link${catalog}" href="/catalog">Skill 源</a><a class="nav-link${usage}" href="/usage">使用情况</a></div></nav>`;
 }
 
 function escapeHtml(value: string): string {

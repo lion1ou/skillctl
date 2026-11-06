@@ -191,7 +191,7 @@ pnpm test
 pnpm lint
 ```
 
-发布到 npm 的包只包含 `bin/` 和编译后的 `dist/`，不会打包 catalog 源文件。
+发布到 npm 的包包含 `bin/`、编译后的 `dist/` 和 `skills/skillctl-usage`，不会打包 catalog 源文件。
 
 版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后发布到私有源：
 
