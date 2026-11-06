@@ -84,6 +84,31 @@ export function inspectSkillSources(
   };
 }
 
+/** git 针对 GitHub 的代理键；全局配置里被写成空值时会屏蔽环境代理。 */
+const GITHUB_PROXY_CONFIG_KEY = 'http.https://github.com/.proxy';
+
+/**
+ * 为 `npx skills add` 子进程准备环境变量。
+ *
+ * 一些代理环境（尤其是 Windows）会在 git 全局配置里留下空的
+ * `http.https://github.com/.proxy=`，它优先级高于 HTTPS_PROXY 环境变量，
+ * 会让 skills CLI 克隆 GitHub 仓库时直连超时或被重置
+ * （`Recv failure: Connection was reset` / `Could not connect to github.com:443`）。
+ * 这里用 GIT_CONFIG_* 把当前环境的代理显式下传给子进程：优先级高于用户全局配置，
+ * 且只作用于本次准备进程，不修改用户机器上的 git 设置。
+ */
+export function resolveExternalPrepareEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const proxy = env.HTTPS_PROXY ?? env.https_proxy ?? env.HTTP_PROXY ?? env.http_proxy;
+  if (!proxy) return env;
+  const index = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10) || 0;
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: GITHUB_PROXY_CONFIG_KEY,
+    [`GIT_CONFIG_VALUE_${index}`]: proxy,
+  };
+}
+
 /** 异步执行 npx skills add，把外部包落到缓存目录，并回传命令行输出。 */
 export function spawnExternalSkillAdd(
   packageId: string,
@@ -99,6 +124,7 @@ export function spawnExternalSkillAdd(
     const child = spawn(npx.command, npx.args, {
       ...npx.options,
       cwd: cachePackageDir,
+      env: resolveExternalPrepareEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- 外部 Skill 准备（`npx skills add`）现在通过 `GIT_CONFIG_*` 把环境代理显式下传给子进程。此前若 git 全局配置里存在空的 `http.https://github.com/.proxy=`，它会覆盖 `HTTPS_PROXY`，导致克隆 GitHub 仓库时直连超时或连接被重置，外部 Skill 无法安装到任何 target（含 workbuddy）。
+
 ## 1.2.10 — 2026-11-05
 
 ### Removed

@@ -3,9 +3,37 @@ import { existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { CATEGORIES_FILE, MANIFEST_FILE, SKILLS_FILE } from '../src/core/brand.js';
-import { installCatalogSkills, resolveCatalogSkills, splitCliLogLines, summarizeExternalPrepareOutput } from '../src/core/catalog-install.js';
+import { installCatalogSkills, resolveCatalogSkills, resolveExternalPrepareEnv, splitCliLogLines, summarizeExternalPrepareOutput } from '../src/core/catalog-install.js';
 import { loadSkillCatalog } from '../src/core/skill-registry.js';
 import { createTmpRepo } from './helpers/tmp-repo.js';
+
+test('为外部包准备进程下传环境代理，覆盖 git 全局空 proxy 配置', () => {
+  const env = { HTTPS_PROXY: 'http://127.0.0.1:53528' };
+  const result = resolveExternalPrepareEnv(env);
+  assert.equal(result.GIT_CONFIG_COUNT, '1');
+  assert.equal(result.GIT_CONFIG_KEY_0, 'http.https://github.com/.proxy');
+  assert.equal(result.GIT_CONFIG_VALUE_0, 'http://127.0.0.1:53528');
+  assert.equal(result.HTTPS_PROXY, 'http://127.0.0.1:53528');
+});
+
+test('保留调用方已有的 GIT_CONFIG 项并追加代理配置', () => {
+  const result = resolveExternalPrepareEnv({
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'user.name',
+    GIT_CONFIG_VALUE_0: 'tester',
+    http_proxy: 'http://proxy.local:8080',
+  });
+  assert.equal(result.GIT_CONFIG_COUNT, '2');
+  assert.equal(result.GIT_CONFIG_KEY_0, 'user.name');
+  assert.equal(result.GIT_CONFIG_VALUE_0, 'tester');
+  assert.equal(result.GIT_CONFIG_KEY_1, 'http.https://github.com/.proxy');
+  assert.equal(result.GIT_CONFIG_VALUE_1, 'http://proxy.local:8080');
+});
+
+test('环境里没有代理时不改动子进程环境', () => {
+  const env = { HOME: '/tmp' };
+  assert.equal(resolveExternalPrepareEnv(env), env);
+});
 
 test('外部包准备失败时提炼可读错误，而不是 spinner 输出', () => {
   const raw = [
