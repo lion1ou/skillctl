@@ -63,6 +63,7 @@ export const MANAGER_STYLES = `
     .badges{display:flex;flex-wrap:wrap;gap:5px;margin:0}.badge{padding:2px 7px;border-radius:9999px;background:#F1F1EF;color:#666662;font-size:10px;line-height:1.5;letter-spacing:.04em;text-transform:uppercase;flex:none}
     .badge.on{background:#EDF3EC;color:var(--green)}.badge.off{background:#FDEBEC;color:var(--red)}.badge.broken{background:#FDEBEC;color:var(--red)}
     .badge.local,.badge.symlink,.badge.category{background:#FBF3DB;color:#956400}.badge.external,.badge.copy,.badge.uncategorized{background:#E1F3FE;color:var(--blue)}
+    .badge.skill-category{background:#FFFFFF;color:#956400;border:1px solid #E4D3A1;text-transform:none}.badge.skill-category.is-empty{color:#666662;border-color:#DEDEDB}
     .badge.cursor,.badge.claude,.badge.kiro,.badge.agents,.badge.codex,.badge.openclaw,.badge.hermes,.badge.gemini,.badge.copilot,.badge.windsurf,.badge.roo,.badge.opencode,.badge.openhands,.badge.droid,.badge.continue,.badge.trae,.badge.trae-cn,.badge.workbuddy,.badge.qoder,.badge.qoder-cn,.badge.codebuddy,.badge.qwen{background:#E1F3FE;color:#1F6C9F}
     .description{color:#555A5D;margin:0;font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
     .description.readonly{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}

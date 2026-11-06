@@ -459,6 +459,11 @@ test('已安装卡片以置灰表示未启用，名称后展示软链或复制',
   assert.match(MANAGER_PAGE, /软链损坏/);
   assert.match(MANAGER_PAGE, /软链/);
   assert.match(MANAGER_PAGE, /复制/);
+  assert.match(MANAGER_PAGE, /badge skill-category/);
+  assert.match(MANAGER_PAGE, /'开发':\['#346538','#EDF3EC'\]/);
+  assert.match(MANAGER_PAGE, /'写作':\['#5C4A86','#F3EEF8'\]/);
+  assert.match(MANAGER_PAGE, /未分类/);
+  assert.match(MANAGER_PAGE, /categoryBySkill/);
 });
 
 test('轮询保留滚动位置，仅显式上下文变化时回顶', () => {

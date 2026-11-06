@@ -266,6 +266,7 @@ const token=__SKILLCTL_TOKEN__;
 let manager={workspaces:[],targets:[]};
 let workspace={workspaceRoot:'',agents:[],skills:[]};
 let catalog={skills:[],categories:[]};
+let categoryBySkill=new Map();
 let currentWorkspace='';
 let currentAgent='';
 let isUpdating=false;
@@ -436,6 +437,8 @@ function renderSkills(resetScroll=false){
   grid.innerHTML=skills.map((skill)=>{
     const installedPath=abbreviateSkillPath(skill.installedPath,currentWorkspace,homeRoot);
     const linkTarget=skill.linkTarget?abbreviateSkillPath(skill.linkTarget,currentWorkspace,homeRoot):'';
+    const categoryName=categoryNameOf(skill);
+    const categoryBadge='<span class="badge skill-category'+(categoryName?'':' is-empty')+'"'+(categoryName?' style="'+categoryTagStyle(categoryName)+'"':'')+'>'+escapeHtml(categoryName||'未分类')+'</span>';
     const modeBadge='<span class="badge '+(skill.isBroken?'broken':(skill.isSymlink?'symlink':'copy'))+'">'+(skill.isBroken?'软链损坏':(skill.isSymlink?'软链':'复制'))+'</span>';
     const disabledClass=!skill.isBroken&&!skill.isEnabled?' is-disabled':'';
     const selected=selectedInstalledSkills.has(skill.id)?' checked':'';
@@ -443,7 +446,7 @@ function renderSkills(resetScroll=false){
     const restore=skill.isBroken?'<button type="button" data-restore-skill="'+escapeHtml(skill.id)+'">恢复</button>':'';
     return \`
     <article class="card\${disabledClass}" data-installed-skill="\${escapeHtml(skill.id)}">
-      <div class="card-head"><div class="skill-title">\${selectBox}<div class="skill-meta"><div class="name" data-toggle-select="\${escapeHtml(skill.id)}">\${escapeHtml(skill.name)}</div>\${modeBadge}</div></div></div>
+      <div class="card-head"><div class="skill-title">\${selectBox}<div class="skill-meta"><div class="name" data-toggle-select="\${escapeHtml(skill.id)}">\${escapeHtml(skill.name)}</div>\${categoryBadge}\${modeBadge}</div></div></div>
       <p class="description readonly" data-open-detail="\${escapeHtml(skill.id)}" title="\${escapeHtml(skill.description)}">\${escapeHtml(skill.description)}</p>
       <p class="path" title="\${escapeHtml(skill.installedPath)}">\${escapeHtml(installedPath)}</p>
       \${skill.isBroken&&skill.linkTarget?'<p class="path" title="'+escapeHtml(skill.linkTarget)+'">指向 '+escapeHtml(linkTarget)+'</p>':''}
@@ -513,6 +516,43 @@ async function streamInstall(body){
 
 ${INITIALIZATION_SCRIPT}
 
+function indexCatalogCategories(){
+  categoryBySkill=new Map();
+  const nameById=new Map((catalog.skills||[]).map((skill)=>[skill.id,skill.name]));
+  for(const category of catalog.categories||[]){
+    for(const id of category.skillIds||[]){
+      if(categoryBySkill.has(id))continue;
+      categoryBySkill.set(id,category.name);
+      const name=nameById.get(id);
+      if(name&&name!==id&&!categoryBySkill.has(name))categoryBySkill.set(name,category.name);
+    }
+  }
+}
+const CATEGORY_TAG_COLORS={
+  '通用':['#146C6A','#E7F4F2'],
+  '开发':['#346538','#EDF3EC'],
+  '写作':['#5C4A86','#F3EEF8'],
+  '助理':['#8A5A44','#F8EFEA'],
+  '每日资讯':['#3D5A80','#E8EEF5'],
+  '移除':['#9F4A2D','#FDEEE8']
+};
+const CATEGORY_TAG_FALLBACK=[['#1F6C9F','#E7F3FE'],['#9F2F2D','#FDEBEC'],['#956400','#FBF3DB'],['#2F6F6A','#E7F4F2'],['#6E5A8A','#F3EEF8'],['#8A5A44','#F8EFEA']];
+function categoryTagStyle(name){
+  const known=CATEGORY_TAG_COLORS[name];
+  let pair=known;
+  if(!pair){
+    let hash=0;
+    for(let i=0;i<name.length;i++) hash=(hash*33+name.charCodeAt(i))>>>0;
+    pair=CATEGORY_TAG_FALLBACK[hash%CATEGORY_TAG_FALLBACK.length];
+  }
+  return 'color:'+pair[0]+';background:'+pair[1]+';border-color:'+pair[1];
+}
+function categoryNameOf(skill){
+  const dir=String(skill.relativeDir||'');
+  const slash=Math.max(dir.lastIndexOf('/'),dir.lastIndexOf('\\\\'));
+  const folder=slash>=0?dir.slice(slash+1):dir;
+  return categoryBySkill.get(folder)||categoryBySkill.get(skill.name)||'';
+}
 async function loadCatalog(){
   try{
     const data=await request('/api/catalog');
@@ -520,6 +560,7 @@ async function loadCatalog(){
   }catch{
     catalog={skills:[],categories:[]};
   }
+  indexCatalogCategories();
 }
 
 async function loadManager(){
