@@ -177,6 +177,10 @@ export const MANAGER_PAGE = `<!doctype html>
           <select id="status"><option value="">全部状态</option><option value="on">已启用</option><option value="off">未启用</option><option value="broken">已失效</option></select>
           <select id="installModeFilter"><option value="">全部方式</option><option value="symlink">软链</option><option value="copy">复制</option></select>
           <span class="result-count" id="resultCount">匹配 <strong>0</strong> · 共 <strong>0</strong></span>
+          <div class="view-switch" role="group" aria-label="展示方式">
+            <button type="button" id="cardViewButton" class="active">卡片</button>
+            <button type="button" id="listViewButton">列表</button>
+          </div>
           <button type="button" class="ghost" id="selectVisibleSkillsButton">全选当前结果</button>
           <button type="button" id="installButton" disabled>安装</button>
         </div>
@@ -295,6 +299,8 @@ const matchesInstalledSkillFilter=${matchesInstalledSkillFilter.toString()};
 const parseInstalledListState=${parseInstalledListState.toString()};
 const installedListStateKey=${installedListStateKey.toString()};
 let selectedInstalledSkills=new Set();
+const installedViewKey='skillctl:view-mode:installed';
+let installedViewMode=localStorage.getItem(installedViewKey)==='list'?'list':'card';
 let pendingListState=null;
 try{pendingListState=parseInstalledListState(sessionStorage.getItem(installedListStateKey()));}catch(error){pendingListState=null;console.error(error)}
 let restoreTarget=null;
@@ -395,6 +401,16 @@ function visibleInstalledSkills(){
     installMode:installModeFilter.value,
   }));
 }
+function applyInstalledView(){
+  grid.classList.toggle('is-list',installedViewMode==='list');
+  document.querySelector('#cardViewButton').classList.toggle('active',installedViewMode==='card');
+  document.querySelector('#listViewButton').classList.toggle('active',installedViewMode==='list');
+}
+function setInstalledView(mode){
+  installedViewMode=mode==='list'?'list':'card';
+  localStorage.setItem(installedViewKey,installedViewMode);
+  applyInstalledView();
+}
 function renderSkills(resetScroll=false){
   const skills=visibleInstalledSkills();
   for(const id of [...selectedInstalledSkills]){
@@ -413,6 +429,7 @@ function renderSkills(resetScroll=false){
   const enabledCount=workspace.skills.filter((skill)=>skill.isEnabled).length;
   summary.innerHTML=escapeHtml(currentWorkspace)+'<br><strong>'+detectedCount+'</strong> 个已检测到 Agent · <strong>'+workspace.skills.length+'</strong> 个已安装 · <strong>'+enabledCount+'</strong> 个启用';
   const catalogScroll=document.querySelector('.catalog-scroll');
+  applyInstalledView();
   if(!agent){grid.innerHTML='<div class="empty">请选择左侧 Agent，查看其 skills 目录中的已安装 Skill</div>';if(resetScroll)catalogScroll.scrollTop=0;return}
   if(skills.length===0){grid.innerHTML='<div class="empty">'+escapeHtml(agent.id)+' 的 '+escapeHtml(agent.skillsPath)+' 中没有符合条件的 Skill</div>';if(resetScroll)catalogScroll.scrollTop=0;return}
   const homeRoot=manager.workspaces[0]?.path||'';
@@ -813,6 +830,8 @@ async function removeAgent(target){
   }finally{isUpdating=false;render(true)}
 }
 
+document.querySelector('#cardViewButton').addEventListener('click',()=>setInstalledView('card'));
+document.querySelector('#listViewButton').addEventListener('click',()=>setInstalledView('list'));
 document.querySelector('#selectVisibleSkillsButton').addEventListener('click',()=>{
   const skills=visibleInstalledSkills();
   const allSelected=skills.length>0&&skills.every((skill)=>selectedInstalledSkills.has(skill.id));

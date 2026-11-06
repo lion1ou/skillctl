@@ -17,17 +17,13 @@ export const USAGE_PAGE = `<!doctype html>
       <h1 class="page-title">使用情况</h1>
       <p class="subtitle">统计 Cursor 与 Codex 读取 skill 文件的次数。同一次会话里的每次读取都会计入，数据只保存在本机。</p>
     </div>
-    <div class="page-header-actions">
-      <button type="button" id="installHookButton">安装记录</button>
-      <button type="button" class="ghost" id="removeHookButton">卸载记录</button>
-    </div>
   </header>
   <div class="notice" id="notice"></div>
   <div class="usage-metrics">
     <section class="panel usage-metric"><span>读取次数</span><strong id="readCount">0</strong></section>
     <section class="panel usage-metric"><span>有记录的 Skill</span><strong id="skillCount">0</strong></section>
-    <section class="panel usage-metric"><span>Cursor hook</span><strong id="hookState">未安装</strong></section>
-    <section class="panel usage-metric"><span>Codex hook</span><strong id="codexHookState">未安装</strong></section>
+    <section class="panel usage-metric usage-hook"><div class="usage-hook-copy"><span>Cursor hook</span><strong id="hookState">未安装</strong></div><button type="button" id="cursorHookButton" data-hook-action="install">安装</button></section>
+    <section class="panel usage-metric usage-hook"><div class="usage-hook-copy"><span>Codex hook</span><strong id="codexHookState">未安装</strong></div><button type="button" id="codexHookButton" data-hook-action="install">安装</button></section>
   </div>
   <div class="usage-charts">
     <section class="panel">
@@ -41,6 +37,7 @@ export const USAGE_PAGE = `<!doctype html>
   </div>
   <section class="panel">
     <table class="usage-table">
+      <colgroup><col><col class="usage-count-col"><col class="usage-time-col"><col class="usage-path-col"></colgroup>
       <thead><tr><th>Skill</th><th>次数</th><th>最近读取</th><th>路径</th></tr></thead>
       <tbody id="usageRows"><tr><td colspan="4">正在读取…</td></tr></tbody>
     </table>
@@ -65,12 +62,20 @@ function renderUsage(data){
   document.querySelector('#skillCount').textContent=String(data.skillCount||0);
   document.querySelector('#hookState').textContent=data.hookInstalled?'已安装':'未安装';
   document.querySelector('#codexHookState').textContent=data.codexHookInstalled?'已安装':'未安装';
+  setHookButton(document.querySelector('#cursorHookButton'),Boolean(data.hookInstalled));
+  setHookButton(document.querySelector('#codexHookButton'),Boolean(data.codexHookInstalled));
   const rows=data.skills||[];
   renderTrend(data.daily||[]);
   renderShare(rows);
   document.querySelector('#usageRows').innerHTML=rows.length
-    ?rows.map((skill)=>'<tr><td>'+escapeHtml(skill.name)+'</td><td>'+skill.readCount+'</td><td>'+escapeHtml(skill.lastReadAt)+'</td><td class="usage-path">'+escapeHtml(skill.path)+'</td></tr>').join('')
+    ?rows.map((skill)=>'<tr><td><a class="usage-skill" href="/catalog/skill?id='+encodeURIComponent(skill.name)+'">'+escapeHtml(skill.name)+'</a></td><td>'+skill.readCount+'</td><td>'+escapeHtml(formatReadTime(skill.lastReadAt))+'</td><td class="usage-path" title="'+escapeHtml(skill.path)+'">'+escapeHtml(skill.path)+'</td></tr>').join('')
     :'<tr><td colspan="4">还没有读取记录。安装记录后，读取 SKILL.md、references 或其他 skill 文件会计入这里。</td></tr>';
+}
+function formatReadTime(value){
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime()))return String(value||'');
+  const pad=(part)=>String(part).padStart(2,'0');
+  return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+' '+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
 }
 const CHART_COLORS=['#1F6C9F','#346538','#9F2F2D','#B26A2A','#5C6B73','#6E5A8A','#2F6F6A','#8A5A44'];
 function renderTrend(days){
@@ -99,27 +104,38 @@ function renderTrend(days){
   const dots=days.map((day,index)=>'<circle cx="'+x(index)+'" cy="'+y(day.count)+'" r="3.5" fill="#1F6C9F"><title>'+escapeHtml(day.day)+' '+day.count+' 次</title></circle>').join('');
   host.innerHTML='<svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="读取次数趋势">'+guides+bars+line+dots+labels+'</svg>';
 }
+function setHookButton(button,installed){
+  button.textContent=installed?'卸载':'安装';
+  button.dataset.hookAction=installed?'uninstall':'install';
+  button.classList.toggle('ghost',installed);
+}
 function renderShare(skills){
   const host=document.querySelector('#usageShare');
-  const total=skills.reduce((sum,skill)=>sum+(skill.readCount||0),0);
+  const ranked=skills.filter((skill)=>(skill.readCount||0)>0).slice().sort((a,b)=>(b.readCount||0)-(a.readCount||0)||String(a.name).localeCompare(String(b.name)));
+  const top=ranked.slice(0,10);
+  const restCount=ranked.slice(10).reduce((sum,skill)=>sum+(skill.readCount||0),0);
+  const shown=restCount>0?top.concat([{name:'其他',readCount:restCount,grouped:true}]):top;
+  const total=shown.reduce((sum,skill)=>sum+(skill.readCount||0),0);
   if(!total){
     host.innerHTML='<p class="subtitle">还没有占比数据。</p>';
     return;
   }
   const cx=110,cy=110,r=78;
   let angle=-Math.PI/2;
-  const slices=skills.map((skill,index)=>{
+  const colorOf=(skill,index)=>skill.grouped?'#C4C3BF':CHART_COLORS[index%CHART_COLORS.length];
+  const slices=shown.map((skill,index)=>{
     const portion=skill.readCount/total;
     const start=angle;
     angle+=portion*Math.PI*2;
-    if(skills.length===1)return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+CHART_COLORS[0]+'"><title>'+escapeHtml(skill.name)+' '+skill.readCount+' 次</title></circle>';
+    const fill=colorOf(skill,index);
+    if(shown.length===1)return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+fill+'"><title>'+escapeHtml(skill.name)+' '+skill.readCount+' 次</title></circle>';
     const x1=cx+r*Math.cos(start),y1=cy+r*Math.sin(start);
     const x2=cx+r*Math.cos(angle),y2=cy+r*Math.sin(angle);
-    return '<path d="M '+cx+' '+cy+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+(portion>0.5?1:0)+' 1 '+x2+' '+y2+' Z" fill="'+CHART_COLORS[index%CHART_COLORS.length]+'"><title>'+escapeHtml(skill.name)+' '+skill.readCount+' 次</title></path>';
+    return '<path d="M '+cx+' '+cy+' L '+x1+' '+y1+' A '+r+' '+r+' 0 '+(portion>0.5?1:0)+' 1 '+x2+' '+y2+' Z" fill="'+fill+'"><title>'+escapeHtml(skill.name)+' '+skill.readCount+' 次</title></path>';
   }).join('');
-  const legend=skills.map((skill,index)=>{
+  const legend=shown.map((skill,index)=>{
     const percent=Math.round(skill.readCount/total*1000)/10;
-    return '<span><i class="usage-swatch" style="background:'+CHART_COLORS[index%CHART_COLORS.length]+'"></i><b>'+escapeHtml(skill.name)+'</b><em>'+percent+'%</em></span>';
+    return '<span><i class="usage-swatch" style="background:'+colorOf(skill,index)+'"></i><b>'+escapeHtml(skill.name)+'</b><em>'+percent+'%</em></span>';
   }).join('');
   host.innerHTML='<div class="usage-share"><svg viewBox="0 0 220 220" role="img" aria-label="Skill 使用占比">'+slices+'</svg><div class="usage-legend">'+legend+'</div></div>';
 }
@@ -138,8 +154,9 @@ async function changeHook(action){
     showNotice(error instanceof Error?error.message:'更新记录 hook 失败');
   }
 }
-document.querySelector('#installHookButton').addEventListener('click',()=>void changeHook('install'));
-document.querySelector('#removeHookButton').addEventListener('click',()=>void changeHook('uninstall'));
+for(const button of [document.querySelector('#cursorHookButton'),document.querySelector('#codexHookButton')]){
+  button.addEventListener('click',()=>void changeHook(button.dataset.hookAction||'install'));
+}
 void loadUsage();
 </script>
 </body>

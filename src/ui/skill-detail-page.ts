@@ -83,6 +83,12 @@ function showError(message){
   notice.textContent=message;
   notice.classList.add('show');
 }
+function formatReadTime(value){
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime()))return String(value||'');
+  const pad=(part)=>String(part).padStart(2,'0');
+  return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate())+' '+pad(date.getHours())+':'+pad(date.getMinutes())+':'+pad(date.getSeconds());
+}
 async function loadSkillUsage(name){
   const count=document.querySelector('#usageCount');
   const last=document.querySelector('#usageLast');
@@ -91,7 +97,7 @@ async function loadSkillUsage(name){
     if(!response.ok)throw new Error(await response.text());
     const data=await response.json();
     count.textContent=data.skill?String(data.skill.readCount):'0';
-    last.textContent=data.skill?data.skill.lastReadAt:'还没有读取';
+    last.textContent=data.skill?formatReadTime(data.skill.lastReadAt):'还没有读取';
   }catch(error){
     count.textContent='—';
     last.textContent=error instanceof Error?error.message:'读取记录失败';

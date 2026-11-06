@@ -37,6 +37,24 @@ export const MANAGER_STYLES = `
     select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='m3 5 4 4 4-4' stroke='%23787774' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:14px}
     input:focus,select:focus,textarea:focus{border-color:#8A8A86;box-shadow:0 0 0 3px rgba(47,52,55,.05)}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+    .view-switch{display:inline-flex;flex:none;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    .view-switch button{height:32px;border:0;border-radius:0;background:#FFFFFF;color:var(--text);padding:0 10px}
+    .view-switch button+button{border-left:1px solid var(--line)}
+    .view-switch button.active{background:#111;color:#FFFFFF}
+    .view-switch button.active:hover{background:#333}
+    .grid.is-list{display:flex;flex-direction:column;gap:6px}
+    .grid.is-list .card{display:grid;grid-template-columns:minmax(180px,.9fr) minmax(0,1.6fr) auto;align-items:center;gap:8px 12px;padding:8px 12px}
+    .grid.is-list .card:has(.usage-marks){grid-template-columns:minmax(200px,1.1fr) auto minmax(0,1.8fr)}
+    .grid.is-list .card:has(.usage-marks) .card-head{display:contents}
+    .grid.is-list .card:hover{transform:none}
+    .grid.is-list .description,.grid.is-list .description[data-open-detail]{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;max-height:1.5em;margin:0}
+    .grid.is-list .path{display:none}
+    .grid.is-list .card>button{margin:0}
+    .usage-marks{display:flex;align-items:center;gap:6px;flex:none}
+    .grid:not(.is-list) .card-head{flex-wrap:wrap}
+    .grid:not(.is-list) .usage-marks{flex:1 0 100%;margin-left:24px}
+    .usage-rank{padding:2px 8px;border-radius:999px;background:#E7F3FE;color:#1F6C9F;font-size:11px;font-weight:700;line-height:1.45;white-space:nowrap}
+    .usage-count{padding:2px 6px;border-radius:4px;background:#EDF3EC;color:#346538;font:600 11px/1.45 "Geist Mono","SF Mono","JetBrains Mono",monospace;white-space:nowrap}
     .card{display:flex;flex-direction:column;gap:6px;min-width:0;padding:14px;border:1px solid #EAEAEA;border-radius:8px;background:#FFFFFF;transition:transform .2s ease,box-shadow .2s ease,opacity .2s ease}
     .card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(47,52,55,.04)}.card.is-disabled{opacity:.55}.card.is-disabled .name,.card.is-disabled .description,.card.is-disabled .path{color:var(--muted)}
     .card>button{margin-top:auto;align-self:flex-start}
@@ -94,8 +112,10 @@ export const MANAGER_STYLES = `
     .init-form .config-path{margin-top:14px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
     .init-form .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.init-form .actions button{flex:0 0 auto}
     .usage-metrics{display:flex;gap:10px;margin-bottom:14px}.usage-metric{flex:1}.usage-metric strong{display:block;margin-top:4px;font:500 28px/1.1 "Newsreader","Instrument Serif","Times New Roman",serif}
-    .usage-charts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.8fr);gap:14px;margin-bottom:14px}.usage-charts h2{margin:0 0 12px;font-size:14px}.usage-chart svg{width:100%;height:220px;display:block}.usage-share{display:flex;gap:16px;align-items:center}.usage-share svg{width:180px;height:180px;flex:none}.usage-legend{display:grid;gap:6px;min-width:0}.usage-legend span{display:flex;gap:8px;align-items:center;min-width:0;font-size:12px}.usage-legend em{margin-left:auto;color:var(--muted);font-style:normal}.usage-swatch{width:8px;height:8px;border-radius:2px;flex:none}
-    .usage-table{width:100%;border-collapse:collapse}.usage-table th,.usage-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.usage-table th{color:var(--muted);font-size:12px;font-weight:600}.usage-path{font:11px/1.45 "Geist Mono","SF Mono",monospace;color:var(--muted)}
+    .usage-hook{display:flex;align-items:center;justify-content:space-between;gap:10px}.usage-hook strong{white-space:nowrap}.usage-hook button{height:28px;padding:0 10px;font-size:12px;flex:none}
+    .usage-charts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(220px,.72fr);gap:14px;align-items:start;margin-bottom:14px}.usage-charts h2{margin:0 0 12px;font-size:14px}.usage-chart svg{width:100%;height:220px;display:block}
+    .usage-share{display:flex;gap:12px;align-items:center}#usageShare .usage-share svg{width:148px;height:148px;flex:none}.usage-legend{display:grid;gap:4px;min-width:0}.usage-legend span{display:flex;gap:8px;align-items:center;min-width:0;font-size:12px;line-height:1.35}.usage-legend b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.usage-legend em{margin-left:auto;color:var(--muted);font-style:normal;flex:none}.usage-swatch{width:8px;height:8px;border-radius:2px;flex:none}
+    .usage-table{width:100%;table-layout:fixed;border-collapse:collapse}.usage-count-col{width:4.5em}.usage-time-col{width:12em}.usage-path-col{width:240px}.usage-table th,.usage-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.usage-table th{color:var(--muted);font-size:12px;font-weight:600}.usage-table td:nth-child(3){white-space:nowrap}.usage-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.45 "Geist Mono","SF Mono",monospace;color:var(--muted)}.usage-skill{color:var(--text);font-weight:600;text-decoration:none}.usage-skill:hover{text-decoration:underline}
     .sync{margin-bottom:14px}
     .sync-list{display:grid;gap:6px;max-height:228px;overflow:auto;margin:10px 0 0}
     .sync-list label{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:6px}
@@ -107,13 +127,13 @@ export const MANAGER_STYLES = `
     @media(max-width:860px){
       body{min-height:100%}main{width:min(100% - 24px,720px);height:auto;min-height:100dvh;padding-top:12px}
       .page-header,.layout{display:block}.page-header .summary{width:100%;margin-top:12px;text-align:left}.summary{margin-top:12px}
-      .grid{grid-template-columns:1fr}.topbar{position:static}
+      .grid{grid-template-columns:1fr}.grid.is-list .card{grid-template-columns:1fr}.topbar{position:static}
       .toolbar-filters>.toolbar-search,.toolbar-filters>select,.toolbar-filters>#installButton,.toolbar-actions>button{width:100%;max-width:none;flex:1 1 100%}
       .result-count{margin-left:0;width:100%}
       .layout{flex:none;min-height:auto}.layout>.panel{max-height:none;margin-bottom:14px;overflow:visible}
       .catalog-main{min-height:auto}.catalog-scroll{overflow:visible}
       .skill-detail-layout{display:block;overflow:visible}.detail-meta{margin-bottom:14px}.detail-document{overflow:visible}
-      .usage-charts,.usage-share{display:block}.usage-share svg{margin-bottom:12px}
+      .usage-charts,.usage-share{display:block}.usage-metrics{display:grid;grid-template-columns:1fr 1fr}.usage-hook{grid-column:1 / -1}#usageShare .usage-share svg{margin-bottom:8px}
     }
 `;
 

@@ -171,7 +171,13 @@ export const CATALOG_PAGE = `<!doctype html>
           <select id="enabledFilter"><option value="">全部启用状态</option><option value="on">安装时启用</option><option value="off">安装时跳过</option></select>
           <select id="typeFilter"><option value="">全部类型</option><option value="local">local</option><option value="external">external</option></select>
           <select id="categoryScope"><option value="">跟随侧栏分类</option><option value="uncategorized">仅未分类</option><option value="categorized">仅已分类</option></select>
+          <select id="sortField" aria-label="排序"><option value="">默认顺序</option><option value="count">使用次数</option><option value="rank">排名</option><option value="name">名称</option></select>
+          <button type="button" class="ghost" id="sortDirection" hidden>高到低</button>
           <span class="result-count" id="resultCount">匹配 <strong>0</strong> · 共 <strong>0</strong></span>
+          <div class="view-switch" role="group" aria-label="展示方式">
+            <button type="button" id="cardViewButton" class="active">卡片</button>
+            <button type="button" id="listViewButton">列表</button>
+          </div>
           <button type="button" class="ghost" id="selectVisibleCatalogButton">全选当前结果</button>
         </div>
         <div class="toolbar toolbar-actions" id="catalogBulkActions" hidden>
@@ -228,6 +234,15 @@ const categoryDialog=document.querySelector('#categoryDialog');
 const confirmDialog=document.querySelector('#confirmDialog');
 let confirmAction=null;
 let selectedCatalogSkills=new Set();
+let usageByName=new Map();
+const catalogViewKey='skillctl:view-mode:catalog';
+let catalogViewMode=localStorage.getItem(catalogViewKey)==='list'?'list':'card';
+const catalogSortKey='skillctl:sort:catalog';
+let catalogSort={field:'',direction:'desc'};
+try{
+  const saved=JSON.parse(localStorage.getItem(catalogSortKey)||'null');
+  if(saved&&(saved.field==='count'||saved.field==='rank'||saved.field==='name'||saved.field==='')&&(saved.direction==='asc'||saved.direction==='desc')) catalogSort=saved;
+}catch(error){console.error(error)}
 const parseCatalogListState=${parseCatalogListState.toString()};
 const catalogListStateKey=${catalogListStateKey.toString()};
 let pendingCatalogState=null;
@@ -269,6 +284,37 @@ function visibleSkills(){
     return inCategory&&matchesKeyword&&matchesEnabled&&matchesType;
   });
 }
+function usageStats(skill){
+  const usage=usageByName.get(skill.id)||usageByName.get(skill.name);
+  return {count:usage?usage.readCount:0,rank:usage&&usage.readCount>0?usage.rank:0};
+}
+function sortLabel(){
+  if(catalogSort.field==='count')return catalogSort.direction==='asc'?'低到高':'高到低';
+  if(catalogSort.field==='rank')return catalogSort.direction==='asc'?'靠前':'靠后';
+  if(catalogSort.field==='name')return catalogSort.direction==='asc'?'A 到 Z':'Z 到 A';
+  return '';
+}
+function sortedSkills(skills){
+  if(!catalogSort.field)return skills;
+  const direction=catalogSort.direction==='asc'?1:-1;
+  return skills.slice().sort((left,right)=>{
+    const leftUsage=usageStats(left);
+    const rightUsage=usageStats(right);
+    const byName=left.name.localeCompare(right.name,'zh');
+    if(catalogSort.field==='name')return byName*direction;
+    if(catalogSort.field==='count')return (leftUsage.count-rightUsage.count)*direction||byName;
+    if(!leftUsage.rank&&!rightUsage.rank)return byName;
+    if(!leftUsage.rank)return 1;
+    if(!rightUsage.rank)return -1;
+    return (leftUsage.rank-rightUsage.rank)*direction||byName;
+  });
+}
+function applySortControl(){
+  document.querySelector('#sortField').value=catalogSort.field;
+  const button=document.querySelector('#sortDirection');
+  button.hidden=!catalogSort.field;
+  button.textContent=sortLabel();
+}
 
 function render(){
   const cats=workspace.catalog.categories;
@@ -299,7 +345,8 @@ function render(){
     document.querySelector('#syncHint').textContent='源目录 skills/ 中发现尚未写入配置表的本地 Skill。';
     document.querySelector('#syncList').innerHTML=workspace.unregistered.map((skill)=>'<label><input type="checkbox" name="syncSkill" value="'+escapeHtml(skill.id)+'" checked><span><span class="sync-name">'+escapeHtml(skill.name)+'</span><span class="sync-desc" title="'+escapeHtml(skill.description)+'">'+escapeHtml(skill.description)+'</span></span></label>').join('');
   }
-  const skills=visibleSkills();
+  applySortControl();
+  const skills=sortedSkills(visibleSkills());
   const visibleIds=new Set(skills.map((skill)=>skill.id));
   for(const id of [...selectedCatalogSkills]){
     if(!visibleIds.has(id))selectedCatalogSkills.delete(id);
@@ -311,6 +358,7 @@ function render(){
     ?'取消全选 ('+selectedCount+')'
     :selectedCount>0?'全选当前结果 · 已选 '+selectedCount:'全选当前结果';
   document.querySelector('#catalogBulkActions').hidden=selectedCount===0;
+  applyCatalogView();
   if(skills.length===0){grid.innerHTML='<div class="empty">没有符合条件的配置项</div>';return}
   grid.innerHTML=skills.map((skill)=>{
     const category=categoryOf(skill.id);
@@ -318,10 +366,26 @@ function render(){
     const checked=selectedCatalogSkills.has(skill.id)?' checked':'';
     const selectBox='<label class="skill-select"><input type="checkbox" data-select-catalog="'+escapeHtml(skill.id)+'"'+checked+' aria-label="选择 '+escapeHtml(skill.name)+'"></label>';
     const categorySelect='<select class="card-category" data-move="'+escapeHtml(skill.id)+'" title="所属分类"><option value="" '+(!category?'selected':'')+'>未分类</option>'+options+'</select>';
-    return '<article class="card" data-skill-detail="'+escapeHtml(skill.id)+'"><div class="card-head"><div class="skill-title">'+selectBox+'<div class="skill-meta"><div class="name" data-toggle-select="'+escapeHtml(skill.id)+'">'+escapeHtml(skill.name)+'</div>'+categorySelect+'</div></div></div><p class="description" data-open-detail="'+escapeHtml(skill.id)+'" title="'+escapeHtml(skill.description)+'"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span> '+escapeHtml(skill.description)+'</p><p class="path">'+escapeHtml(skill.source)+' · '+escapeHtml(skill.package)+'</p></article>';
+    return '<article class="card" data-skill-detail="'+escapeHtml(skill.id)+'"><div class="card-head"><div class="skill-title">'+selectBox+'<div class="skill-meta"><div class="name" data-toggle-select="'+escapeHtml(skill.id)+'">'+escapeHtml(skill.name)+'</div>'+categorySelect+'</div></div><div class="usage-marks">'+usageMarks(skill)+'</div></div><p class="description" data-open-detail="'+escapeHtml(skill.id)+'" title="'+escapeHtml(skill.description)+'"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span> '+escapeHtml(skill.description)+'</p><p class="path">'+escapeHtml(skill.source)+' · '+escapeHtml(skill.package)+'</p></article>';
   }).join('');
 }
 
+function usageMarks(skill){
+  const usage=usageByName.get(skill.id)||usageByName.get(skill.name);
+  const count=usage?usage.readCount:0;
+  const rank=usage&&count>0?usage.rank:0;
+  return '<span class="usage-rank">'+(rank?'第 '+rank+' 名':'未上榜')+'</span><span class="usage-count">'+count+' 次</span>';
+}
+function applyCatalogView(){
+  grid.classList.toggle('is-list',catalogViewMode==='list');
+  document.querySelector('#cardViewButton').classList.toggle('active',catalogViewMode==='card');
+  document.querySelector('#listViewButton').classList.toggle('active',catalogViewMode==='list');
+}
+function setCatalogView(mode){
+  catalogViewMode=mode==='list'?'list':'card';
+  localStorage.setItem(catalogViewKey,catalogViewMode);
+  applyCatalogView();
+}
 async function request(url,options={}){
   const response=await fetch(url,{...options,headers:{'x-skillctl-token':token,'content-type':'application/json',...(options.headers||{})}});
   if(!response.ok)throw new Error(await response.text());
@@ -333,6 +397,14 @@ async function loadWorkspace(showError=true){
   try{
     workspace=await request('/api/catalog');
     if(currentCategory&&currentCategory!=='__uncategorized__'&&!workspace.catalog.categories.some((category)=>category.id===currentCategory)) currentCategory='';
+    try{
+      const usage=await request('/api/usage');
+      usageByName=new Map();
+      (usage.skills||[]).forEach((skill,index)=>usageByName.set(skill.name,{readCount:skill.readCount||0,rank:index+1}));
+    }catch(usageError){
+      usageByName=new Map();
+      console.error(usageError);
+    }
     clearNotice();
     render();
   }catch(error){
@@ -423,6 +495,19 @@ grid.addEventListener('keydown',(event)=>{
     detail.click();
   }
 });
+document.querySelector('#sortField').addEventListener('change',()=>{
+  catalogSort.field=document.querySelector('#sortField').value;
+  catalogSort.direction=catalogSort.field==='count'?'desc':'asc';
+  localStorage.setItem(catalogSortKey,JSON.stringify(catalogSort));
+  render();
+});
+document.querySelector('#sortDirection').addEventListener('click',()=>{
+  catalogSort.direction=catalogSort.direction==='asc'?'desc':'asc';
+  localStorage.setItem(catalogSortKey,JSON.stringify(catalogSort));
+  render();
+});
+document.querySelector('#cardViewButton').addEventListener('click',()=>setCatalogView('card'));
+document.querySelector('#listViewButton').addEventListener('click',()=>setCatalogView('list'));
 document.querySelector('#selectVisibleCatalogButton').addEventListener('click',()=>{
   const skills=visibleSkills();
   const allSelected=skills.length>0&&skills.every((skill)=>selectedCatalogSkills.has(skill.id));
