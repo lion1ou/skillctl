@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.3 — 2026-11-07
+
+### Removed
+
+- 撤回外部 Skill 准备时用 `GIT_CONFIG_*` 下传代理的逻辑。GitHub 代理由本机 git 配置负责，程序不再改写子进程的代理配置。
+
 ## 1.3.2 — 2026-11-06
 
 ### Changed
@@ -24,10 +30,6 @@
 - 管理页新增「使用情况」，展示趋势、占比和每个 skill 的次数。详情页展示当前 skill 的次数和最近读取时间。
 - 同一次会话里的每次文件读取都计入。只统计 `skills/` 或 `skills-cursor/` 下带扩展名的具体文件；纯目录、未展开的变量、花括号和通配符不计。
 - 从详情返回安装管理或 Skill 源时，恢复搜索、筛选、选中项和滚动位置。
-
-### Fixed
-
-- 外部 Skill 准备（`npx skills add`）现在通过 `GIT_CONFIG_*` 把环境代理显式下传给子进程。此前若 git 全局配置里存在空的 `http.https://github.com/.proxy=`，它会覆盖 `HTTPS_PROXY`，导致克隆 GitHub 仓库时直连超时或连接被重置，外部 Skill 无法安装到任何 target（含 workbuddy）。
 
 ## 1.2.10 — 2026-11-05
 
