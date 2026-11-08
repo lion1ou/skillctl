@@ -15,7 +15,7 @@ export const USAGE_PAGE = `<!doctype html>
   <header class="page-header">
     <div>
       <h1 class="page-title">使用情况</h1>
-      <p class="subtitle">统计 Cursor 与 Codex 读取 skill 文件的次数。同一次会话里的每次读取都会计入，数据只保存在本机。</p>
+      <p class="subtitle">统计 Cursor、Codex 与 Claude 读取 skill 文件的次数。同一次会话里的每次读取都会计入，数据只保存在本机。</p>
     </div>
   </header>
   <div class="notice" id="notice"></div>
@@ -24,6 +24,7 @@ export const USAGE_PAGE = `<!doctype html>
     <section class="panel usage-metric"><span>有记录的 Skill</span><strong id="skillCount">0</strong></section>
     <section class="panel usage-metric usage-hook"><div class="usage-hook-copy"><span>Cursor hook</span><strong id="hookState">未安装</strong></div><button type="button" id="cursorHookButton" data-hook-action="install">安装</button></section>
     <section class="panel usage-metric usage-hook"><div class="usage-hook-copy"><span>Codex hook</span><strong id="codexHookState">未安装</strong></div><button type="button" id="codexHookButton" data-hook-action="install">安装</button></section>
+    <section class="panel usage-metric usage-hook"><div class="usage-hook-copy"><span>Claude hook</span><strong id="claudeHookState">未安装</strong></div><button type="button" id="claudeHookButton" data-hook-action="install">安装</button></section>
   </div>
   <div class="usage-charts">
     <section class="panel">
@@ -62,8 +63,10 @@ function renderUsage(data){
   document.querySelector('#skillCount').textContent=String(data.skillCount||0);
   document.querySelector('#hookState').textContent=data.hookInstalled?'已安装':'未安装';
   document.querySelector('#codexHookState').textContent=data.codexHookInstalled?'已安装':'未安装';
+  document.querySelector('#claudeHookState').textContent=data.claudeHookInstalled?'已安装':'未安装';
   setHookButton(document.querySelector('#cursorHookButton'),Boolean(data.hookInstalled));
   setHookButton(document.querySelector('#codexHookButton'),Boolean(data.codexHookInstalled));
+  setHookButton(document.querySelector('#claudeHookButton'),Boolean(data.claudeHookInstalled));
   const rows=data.skills||[];
   renderTrend(data.daily||[]);
   renderShare(rows);
@@ -149,12 +152,12 @@ async function loadUsage(){
 async function changeHook(action){
   try{
     renderUsage(await request('/api/usage/hook',{method:'POST',body:JSON.stringify({action})}));
-    showNotice(action==='install'?'已安装 Cursor 和 Codex 读取记录':'已卸载 Cursor 和 Codex 读取记录',true);
+    showNotice(action==='install'?'已安装 Cursor、Codex 和 Claude 读取记录':'已卸载 Cursor、Codex 和 Claude 读取记录',true);
   }catch(error){
     showNotice(error instanceof Error?error.message:'更新记录 hook 失败');
   }
 }
-for(const button of [document.querySelector('#cursorHookButton'),document.querySelector('#codexHookButton')]){
+for(const button of [document.querySelector('#cursorHookButton'),document.querySelector('#codexHookButton'),document.querySelector('#claudeHookButton')]){
   button.addEventListener('click',()=>void changeHook(button.dataset.hookAction||'install'));
 }
 void loadUsage();

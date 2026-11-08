@@ -10,8 +10,8 @@ export function isGitRemoteSource(value: string): boolean {
   return /^(https?:\/\/|git@|ssh:\/\/|file:\/\/)/i.test(trimmed);
 }
 
-/** 把常见 https git 地址规范为 SSH；file:// 与已有 SSH 保持可用。 */
-export function toSshGitRemote(remote: string): string {
+/** 去掉尾部斜杠，并为 git@ 地址补上 .git。不改协议。 */
+export function canonicalizeGitRemote(remote: string): string {
   const trimmed = remote.trim().replace(/\/+$/, '');
   if (!trimmed) return trimmed;
   if (/^file:/i.test(trimmed)) return trimmed;
@@ -19,11 +19,24 @@ export function toSshGitRemote(remote: string): string {
     return /\.git$/i.test(trimmed) ? trimmed : `${trimmed}.git`;
   }
   if (/^ssh:\/\//i.test(trimmed)) return trimmed;
+  return trimmed;
+}
+
+/** 把常见 https git 地址规范为 SSH；file:// 与已有 SSH 保持可用。 */
+export function toSshGitRemote(remote: string): string {
+  const trimmed = canonicalizeGitRemote(remote);
+  if (!trimmed) return trimmed;
+  if (/^file:/i.test(trimmed) || /^git@/i.test(trimmed) || /^ssh:\/\//i.test(trimmed)) return trimmed;
   const https = trimmed.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/i);
   if (https) {
     return `git@${https[1]}:${https[2]!.replace(/\.git$/i, '')}.git`;
   }
   return trimmed;
+}
+
+/** 按偏好决定是否把 https 改写成 SSH。https 偏好保留用户给出的协议。 */
+export function normalizeGitRemote(remote: string, protocol: 'https' | 'ssh'): string {
+  return protocol === 'ssh' ? toSshGitRemote(remote) : canonicalizeGitRemote(remote);
 }
 
 /** 由远程地址推导 ~/.config/skillctl/sources/<owner>/<repo> 本地路径。 */
@@ -40,7 +53,7 @@ export function ensureGitSourceCheckout(
   remote: string,
   options: { env?: NodeJS.ProcessEnv } = {},
 ): { localPath: string; remote: string } {
-  const normalized = toSshGitRemote(normalizeRemote(remote));
+  const normalized = canonicalizeGitRemote(normalizeRemote(remote));
   const localPath = resolveGitSourceLocalPath(normalized, options.env);
   if (existsSync(join(localPath, '.git'))) {
     assertSameRemote(localPath, normalized);

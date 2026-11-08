@@ -11,10 +11,7 @@ Configuration-driven installer for Agent Skills. `skill-ctl` does not ship a cat
 
 ## Install
 
-Install from the private registry (configure the scope first):
-
 ```bash
-npm config set @lion1ou:registry https://npm.n.lion1ou.tech:16666/
 npm install -g @lion1ou/skill-ctl
 ```
 
@@ -24,7 +21,7 @@ Global install provides the `skill-ctl` command. You can also run it without ins
 npx @lion1ou/skill-ctl
 ```
 
-The skill catalog (e.g. `lion1ou-skills`) is not bundled. Point init at a local path or git URL: `skill-ctl init --source <path-or-git-url>`. See [`../PRIVATE-NPM.md`](../PRIVATE-NPM.md).
+The skill catalog is not bundled. Point init at a local path or git URL: `skill-ctl init --source <path-or-git-url>`.
 
 For local development:
 
@@ -48,6 +45,7 @@ skill-ctl init --source https://github.com/owner/skill-catalog.git
 - `--source` is required in non-interactive mode.
 - `--cache` is optional. The default is `<skillctl>/.cache`.
 - Machine-local mapping is stored at `~/.config/skillctl/config.json`.
+- Optional preferences live at `~/.config/skillctl/preferences.json`. Copy [`skillctl.config.example.json`](skillctl.config.example.json) there. `gitProtocol` is `https` or `ssh` (ssh rewrites https remotes). `requireChineseDescription` asks for a Chinese description when registering a skill. `npmRegistry` is used only by `pnpm run publish:npm`. This file stays on the machine and is not part of the repository.
 
 If the source directory has no catalog files, init creates:
 
@@ -119,7 +117,7 @@ skill-ctl manage --port 4173 --no-open
 - Detail pages show only `SKILL.md` (or the disabled filename), not other files in the skill directory. Read paths must stay inside a managed Workspace, the local source directory, or the external cache root.
 - Toggling a symlinked installed skill modifies its real source and affects other links to that source, so the page asks for confirmation.
 - The service only binds to the loopback address and protects its API with a random per-process token.
-- The dashboard pages load a small analytics script from `track.lion1ou.tech` that reports anonymous page views, front-end errors and performance timings (app name `skillctl`). It never sends skill content, file paths or the access token. Set `SKILLCTL_NO_TELEMETRY=1` to disable it entirely; the pages then keep a strict CSP with no third-party origins.
+- Usage counts stay in `~/.config/skillctl/usage.json`. `skill-ctl hook install` records reads from Cursor, Codex, and Claude. Nothing is uploaded.
 
 ## Catalog layout
 
@@ -130,7 +128,7 @@ skill-ctl manage --port 4173 --no-open
 └── skills/<skill-name>/
 ```
 
-Each registry item has `id`, `package`, `name`, a Chinese `description`, `version`, `source`, `type` (`local` or `external`), and `enabled`. A skill belongs to exactly one category.
+Each registry item has `id`, `package`, `name`, `description`, `version`, `source`, `type` (`local` or `external`), and `enabled`. A skill belongs to exactly one category. Set `requireChineseDescription` in preferences when new descriptions must contain Chinese.
 
 ## Cache
 
@@ -192,11 +190,13 @@ pnpm test
 pnpm lint
 ```
 
-The published npm package contains `bin/`, compiled `dist/`, and `skills/skillctl-usage`. Catalog sources are never bundled.
+The published npm package contains `bin/`, compiled `dist/`, `skillctl.config.example.json`, and `skills/skillctl-usage`. Catalog sources are never bundled.
 
-Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish `@lion1ou/skill-ctl@1.2.0` yourself after committing:
+Release notes are in [CHANGELOG.md](CHANGELOG.md). To publish after committing:
 
 ```bash
 pnpm test
 pnpm run publish:npm
 ```
+
+`publish:npm` reads `npmRegistry` from `~/.config/skillctl/preferences.json`. Without that file it publishes to `https://registry.npmjs.org/`.

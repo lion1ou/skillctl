@@ -15,7 +15,8 @@ import {
 } from './cli-config.js';
 import { loadSkillCatalog } from './skill-registry.js';
 import type { TargetId } from './targets.js';
-import { toSshGitRemote } from './source-git.js';
+import { loadProductPreferences } from './product-preferences.js';
+import { normalizeGitRemote } from './source-git.js';
 import {
   listMissingProjectSkills,
   readWorkspaceProject,
@@ -29,17 +30,17 @@ export interface WorkspaceBootstrapResult {
   installed: CatalogInstallResult[];
 }
 
-/** 若本机未初始化且目录含项目配置，用 SSH 源完成 CLI 初始化。 */
+/** 若本机未初始化且目录含项目配置，用其中的源地址完成 CLI 初始化。 */
 export function ensureCliInitializedFromProject(
   workspaceRoot: string,
   env: NodeJS.ProcessEnv = process.env,
 ): CliConfig | null {
   const existing = peekCliConfig(env);
   if (existing) return existing;
-  const project = readWorkspaceProject(workspaceRoot);
+  const project = readWorkspaceProject(workspaceRoot, env);
   if (!project?.sourceRemote) return null;
   return initializeCliConfig({
-    sourceDir: toSshGitRemote(project.sourceRemote),
+    sourceDir: normalizeGitRemote(project.sourceRemote, loadProductPreferences(env).gitProtocol),
     env,
   });
 }
@@ -59,7 +60,7 @@ export async function addAndBootstrapWorkspace(
     throw new Error('CLI 尚未初始化，且该目录没有可用的 .skillctl/workspace.json 源地址');
   }
   addManagedWorkspace(root, env);
-  const project = readWorkspaceProject(root);
+  const project = readWorkspaceProject(root, env);
   if (project) {
     for (const targetId of project.pinnedTargetIds) {
       setWorkspaceTargetPinned(root, targetId, true, env);
@@ -71,7 +72,7 @@ export async function addAndBootstrapWorkspace(
   const config = loadCliConfig(env);
   return {
     config,
-    project: readWorkspaceProject(root),
+    project: readWorkspaceProject(root, env),
     installed,
   };
 }

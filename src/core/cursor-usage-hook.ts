@@ -18,11 +18,14 @@ interface CursorHooksFile {
 export interface CursorUsageHookStatus {
   hookInstalled: boolean;
   codexHookInstalled: boolean;
+  claudeHookInstalled: boolean;
   skillInstalled: boolean;
   hooksPath: string;
   codexHooksPath: string;
+  claudeHooksPath: string;
   scriptPath: string;
   skillPath: string;
+  claudeSkillPath: string;
 }
 
 interface CodexHookHandler {
@@ -45,6 +48,7 @@ const PREVIOUS_PROBE = 'skill-read-probe.mjs';
 const USAGE_SKILL_NAME = 'skillctl-usage';
 const CURSOR_READ_MATCHER = 'Read|Shell|Grep';
 const CODEX_READ_MATCHER = '^(?:Read|Shell|Grep|Bash|exec)$';
+const CLAUDE_READ_MATCHER = '^(?:Read|Grep|Bash)$';
 
 /** 生成只记录、不拦截读取的 Cursor / Codex hook 脚本。 */
 export function buildUsageRecordHookScript(nodePath: string, cliEntry: string): string {
@@ -112,7 +116,7 @@ function readPath(payload) {
   return '';
 }
 
-function isCodex(payload) {
+function useSessionId(payload) {
   return typeof payload.session_id === 'string' && typeof payload.conversation_id !== 'string';
 }
 
@@ -137,7 +141,7 @@ process.stdin.on('end', () => {
   try {
     const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     const source = readPath(payload);
-    const conversationId = isCodex(payload)
+    const conversationId = useSessionId(payload)
       ? payload.session_id.trim()
       : (typeof payload.conversation_id === 'string' ? payload.conversation_id.trim() : '');
     if (source && conversationId) {
@@ -155,7 +159,7 @@ process.stdin.on('end', () => {
         else if (result.status) logHook('usage record exit ' + result.status);
       }
     }
-    if (!isCodex(payload)) process.stdout.write('{"permission":"allow"}\\n');
+    if (!useSessionId(payload)) process.stdout.write('{"permission":"allow"}\\n');
   } catch (error) {
     logHook(error instanceof Error ? error.message : String(error));
     process.stdout.write('{"permission":"allow"}\\n');
@@ -164,7 +168,7 @@ process.stdin.on('end', () => {
 `;
 }
 
-/** 把读取记录 hook 安装到 Cursor 和 Codex，并放入 skillctl-usage。 */
+/** 把读取记录 hook 安装到 Cursor、Codex 和 Claude，并放入 skillctl-usage。 */
 export function installCursorUsageHook(options: {
   homeDir?: string;
   nodePath: string;
@@ -184,12 +188,16 @@ export function installCursorUsageHook(options: {
   });
   hooks.hooks.preToolUse = commands;
   writeHooksFile(paths.hooksPath, hooks);
-  installCodexUsageHook(homeDir, `${options.nodePath} ${paths.scriptPath}`);
+  const command = `${options.nodePath} ${paths.scriptPath}`;
+  installCodexUsageHook(homeDir, command);
+  installClaudeUsageHook(homeDir, command);
   const template = options.skillTemplateDir ?? join(resolveCliPackageRoot(), 'skills', USAGE_SKILL_NAME);
   const templateFile = join(template, 'SKILL.md');
   if (!existsSync(templateFile)) throw new Error(`缺少读取记录 skill：${templateFile}`);
   mkdirSync(paths.skillPath, { recursive: true });
   copyFileSync(templateFile, join(paths.skillPath, 'SKILL.md'));
+  mkdirSync(paths.claudeSkillPath, { recursive: true });
+  copyFileSync(templateFile, join(paths.claudeSkillPath, 'SKILL.md'));
   removeLegacyCursorSkill(homeDir);
   return readCursorUsageHookStatus(homeDir);
 }
@@ -201,9 +209,11 @@ export function readCursorUsageHookStatus(homeDir = homedir()): CursorUsageHookS
   const hookInstalled = (hooks.hooks.preToolUse ?? []).some((hook) => hook.command.includes(HOOK_SCRIPT_NAME));
   const codex = existsSync(paths.codexHooksPath) ? readCodexHooksFile(paths.codexHooksPath) : emptyCodexHooks();
   const codexHookInstalled = (codex.hooks.PreToolUse ?? []).some((group) => group.hooks.some((hook) => isManagedCommand(hook.command)));
+  const claudeHookInstalled = claudePreToolUse(paths.claudeHooksPath).some((group) => group.hooks.some((hook) => isManagedCommand(hook.command)));
   return {
     hookInstalled,
     codexHookInstalled,
+    claudeHookInstalled,
     skillInstalled: existsSync(join(paths.skillPath, 'SKILL.md')),
     ...paths,
   };
@@ -221,18 +231,22 @@ export function uninstallCursorUsageHook(homeDir = homedir()): CursorUsageHookSt
     writeHooksFile(paths.hooksPath, hooks);
   }
   uninstallCodexUsageHook(homeDir);
+  uninstallClaudeUsageHook(homeDir);
   rmSync(paths.scriptPath, { force: true });
   removeSkillDirectory(paths.skillPath);
+  removeSkillDirectory(paths.claudeSkillPath);
   removeLegacyCursorSkill(homeDir);
   return readCursorUsageHookStatus(homeDir);
 }
 
-function hookPaths(homeDir: string): Pick<CursorUsageHookStatus, 'hooksPath' | 'codexHooksPath' | 'scriptPath' | 'skillPath'> {
+function hookPaths(homeDir: string): Pick<CursorUsageHookStatus, 'hooksPath' | 'codexHooksPath' | 'claudeHooksPath' | 'scriptPath' | 'skillPath' | 'claudeSkillPath'> {
   return {
     hooksPath: join(homeDir, '.cursor', 'hooks.json'),
     codexHooksPath: join(homeDir, '.codex', 'hooks.json'),
+    claudeHooksPath: join(homeDir, '.claude', 'settings.json'),
     scriptPath: join(homeDir, '.cursor', 'hooks', HOOK_SCRIPT_NAME),
     skillPath: join(homeDir, '.agents', 'skills', USAGE_SKILL_NAME),
+    claudeSkillPath: join(homeDir, '.claude', 'skills', USAGE_SKILL_NAME),
   };
 }
 
@@ -246,6 +260,80 @@ function installCodexUsageHook(homeDir: string, command: string): void {
   });
   hooks.hooks.PreToolUse = groups;
   writeCodexHooksFile(file, hooks);
+}
+
+function installClaudeUsageHook(homeDir: string, command: string): void {
+  const file = join(homeDir, '.claude', 'settings.json');
+  const settings = readClaudeSettings(file);
+  const hooks = claudeHookTable(settings, file);
+  const groups = withoutManagedCodexHooks(claudeGroups(hooks.PreToolUse, file));
+  groups.push({
+    matcher: CLAUDE_READ_MATCHER,
+    hooks: [{ type: 'command', command, timeout: 3 }],
+  });
+  hooks.PreToolUse = groups;
+  settings.hooks = hooks;
+  writeJsonFile(file, settings);
+}
+
+function uninstallClaudeUsageHook(homeDir: string): void {
+  const file = join(homeDir, '.claude', 'settings.json');
+  if (!existsSync(file)) return;
+  const settings = readClaudeSettings(file);
+  if (settings.hooks === undefined) return;
+  const hooks = claudeHookTable(settings, file);
+  const groups = withoutManagedCodexHooks(claudeGroups(hooks.PreToolUse, file));
+  if (groups.length === 0) delete hooks.PreToolUse;
+  else hooks.PreToolUse = groups;
+  if (Object.keys(hooks).length === 0) delete settings.hooks;
+  else settings.hooks = hooks;
+  writeJsonFile(file, settings);
+}
+
+function claudePreToolUse(file: string): CodexMatcherGroup[] {
+  if (!existsSync(file)) return [];
+  const settings = readClaudeSettings(file);
+  if (settings.hooks === undefined) return [];
+  return claudeGroups(claudeHookTable(settings, file).PreToolUse, file);
+}
+
+function claudeHookTable(settings: Record<string, unknown>, file: string): Record<string, unknown> {
+  if (settings.hooks === undefined) return {};
+  if (!settings.hooks || typeof settings.hooks !== 'object' || Array.isArray(settings.hooks)) {
+    throw new Error(`无效的 Claude 设置：${file}`);
+  }
+  return { ...(settings.hooks as Record<string, unknown>) };
+}
+
+function claudeGroups(value: unknown, file: string): CodexMatcherGroup[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error(`无效的 Claude 设置：${file}`);
+  for (const group of value) {
+    if (!group || typeof group !== 'object' || !Array.isArray((group as CodexMatcherGroup).hooks)) {
+      throw new Error(`无效的 Claude 设置：${file}`);
+    }
+  }
+  return value as CodexMatcherGroup[];
+}
+
+function readClaudeSettings(file: string): Record<string, unknown> {
+  if (!existsSync(file)) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`无法读取 Claude 设置：${file}：${message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`无效的 Claude 设置：${file}`);
+  }
+  return { ...(parsed as Record<string, unknown>) };
+}
+
+function writeJsonFile(file: string, value: unknown): void {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
 function uninstallCodexUsageHook(homeDir: string): void {

@@ -38,15 +38,45 @@ test('读取已有 .skillctl/workspace.json', () => {
         cursor: { mode: 'symlink', skills: ['demo'] },
       },
     }, null, 2)}\n`);
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+    } as NodeJS.ProcessEnv;
     assert.equal(workspaceProjectPath(workspace), file);
-    assert.deepEqual(readWorkspaceProject(workspace), {
+    assert.deepEqual(readWorkspaceProject(workspace, env), {
       version: 1,
-      sourceRemote: 'git@github.com:lion1ou/skills.git',
+      sourceRemote: 'https://github.com/lion1ou/skills.git',
       pinnedTargetIds: ['cursor'],
       targets: {
         cursor: { mode: 'symlink', skills: ['demo'] },
       },
     });
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('gitProtocol 为 ssh 时，项目配置里的 https 地址规范为 SSH', () => {
+  const repo = createTmpRepo('skillctl-ws-project-ssh-');
+  try {
+    const workspace = join(repo.root, 'project');
+    mkdirSync(join(workspace, '.skillctl'), { recursive: true });
+    writeFileSync(join(workspace, '.skillctl/workspace.json'), `${JSON.stringify({
+      version: 1,
+      sourceRemote: 'https://github.com/lion1ou/skills.git',
+      pinnedTargetIds: [],
+      targets: {},
+    })}\n`);
+    const env = {
+      HOME: repo.root,
+      XDG_CONFIG_HOME: join(repo.root, 'config'),
+      SKILLCTL_PREFERENCES: join(repo.root, 'preferences.json'),
+    } as NodeJS.ProcessEnv;
+    writeFileSync(env.SKILLCTL_PREFERENCES, `${JSON.stringify({ gitProtocol: 'ssh' })}\n`);
+    assert.equal(
+      readWorkspaceProject(workspace, env)?.sourceRemote,
+      'git@github.com:lion1ou/skills.git',
+    );
   } finally {
     repo.cleanup();
   }

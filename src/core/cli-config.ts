@@ -4,7 +4,8 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CATEGORIES_FILE, CLI_NAME, SKILLS_FILE } from './brand.js';
 import type { CategoryRecord, SkillRecord } from './skill-registry.js';
-import { ensureGitSourceCheckout, isGitRemoteSource, toSshGitRemote } from './source-git.js';
+import { loadProductPreferences } from './product-preferences.js';
+import { ensureGitSourceCheckout, isGitRemoteSource, normalizeGitRemote } from './source-git.js';
 import { getTarget, type TargetId } from './targets.js';
 
 export interface ManagedWorkspaceConfig {
@@ -115,9 +116,10 @@ export function resolveSourceInput(
 ): { sourceDir: string; sourceRemote?: string } {
   const trimmed = value.trim();
   if (isGitRemoteSource(trimmed)) {
-    const remote = toSshGitRemote(trimmed);
+    const protocol = loadProductPreferences(env).gitProtocol;
+    const remote = normalizeGitRemote(trimmed, protocol);
     const checkout = ensureGitSourceCheckout(remote, { env });
-    return { sourceDir: checkout.localPath, sourceRemote: toSshGitRemote(checkout.remote) };
+    return { sourceDir: checkout.localPath, sourceRemote: normalizeGitRemote(checkout.remote, protocol) };
   }
   return { sourceDir: resolveRequiredAbsolutePath(trimmed, '源目录') };
 }
@@ -133,7 +135,10 @@ function normalizeLoadedConfig(
     workspaces: normalizeWorkspaces(config.workspaces, env),
   };
   if (typeof config.sourceRemote === 'string' && config.sourceRemote.trim()) {
-    loaded.sourceRemote = toSshGitRemote(config.sourceRemote);
+    loaded.sourceRemote = normalizeGitRemote(
+      config.sourceRemote,
+      loadProductPreferences(env).gitProtocol,
+    );
   }
   return loaded;
 }

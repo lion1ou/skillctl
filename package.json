@@ -21,8 +21,7 @@
     "url": "https://github.com/lion1ou/skillctl/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "registry": "https://npm.n.lion1ou.tech:16666/"
+    "access": "public"
   },
   "files": [
     "bin/run.js",
@@ -30,6 +29,7 @@
     "LICENSE",
     "README.md",
     "README.zh-CN.md",
+    "skillctl.config.example.json",
     "skills"
   ],
   "type": "module",
@@ -44,7 +44,7 @@
     "lint": "eslint src test --ext .ts",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm test",
-    "publish:npm": "npm publish --registry https://npm.n.lion1ou.tech:16666/"
+    "publish:npm": "node scripts/publish-npm.mjs"
   },
   "engines": {
     "node": ">=18.17"
@@ -53,8 +53,6 @@
     "@clack/core": "^0.3.3",
     "@clack/prompts": "^0.7.0",
     "@oclif/core": "^4.0.0",
-    "baoyu-chrome-cdp": "^0.1.1",
-    "baoyu-md": "^0.1.1",
     "chalk": "^5.3.0",
     "figlet": "^1.7.0"
   },

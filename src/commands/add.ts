@@ -9,6 +9,7 @@ import {
   type SkillCatalog,
   type SkillRecord,
 } from '../core/skill-registry.js';
+import { loadProductPreferences, shouldRequestChineseDescription } from '../core/product-preferences.js';
 import { inspectPackageSkills, searchSkills } from '../core/skills-source.js';
 
 export default class Add extends Command {
@@ -51,11 +52,12 @@ async function registerLocalSkills(sourceDir: string, catalog: SkillCatalog): Pr
     missing.map((skill) => ({ value: skill.name, label: skill.name, hint: skill.description })),
   );
   const categoryId = await promptCategory(catalog);
+  const preferences = loadProductPreferences();
   const records: SkillRecord[] = [];
   for (const name of selected) {
     const skill = missing.find((item) => item.name === name);
     if (!skill) continue;
-    records.push({ ...skill, description: await ensureChineseDescription(skill) });
+    records.push({ ...skill, description: await descriptionForRegistry(skill.description, skill.name, preferences) });
   }
   addSkillsToRegistry(sourceDir, catalog, categoryId, records);
   p.outro(`已登记 ${records.length} 个本地 skill`);
@@ -94,6 +96,7 @@ async function registerExternalSkills(
     available.map((skill) => ({ value: skill.name, label: skill.name, hint: skill.description })),
   );
   const categoryId = await promptCategory(catalog);
+  const preferences = loadProductPreferences();
   const records: SkillRecord[] = [];
   for (const name of selected) {
     const skill = available.find((item) => item.name === name);
@@ -102,7 +105,7 @@ async function registerExternalSkills(
       id: skill.name,
       package: packageId,
       name: skill.name,
-      description: await promptChineseDescription(skill.name, skill.description),
+      description: await descriptionForRegistry(skill.description, skill.name, preferences),
       version: '*',
       source: `https://github.com/${packageId}`,
       type: 'external',
@@ -137,10 +140,14 @@ async function promptSkills(
   return selected as string[];
 }
 
-/** 对非中文介绍发起补全，确保配置表适合中文展示。 */
-async function ensureChineseDescription(skill: SkillRecord): Promise<string> {
-  if (/[\u4e00-\u9fff]/.test(skill.description)) return skill.description;
-  return promptChineseDescription(skill.name, skill.description);
+/** 偏好要求中文且介绍里没有汉字时，才提示补写。 */
+async function descriptionForRegistry(
+  description: string,
+  name: string,
+  preferences: ReturnType<typeof loadProductPreferences>,
+): Promise<string> {
+  if (!shouldRequestChineseDescription(description, preferences)) return description;
+  return promptChineseDescription(name, description);
 }
 
 /** 提示输入中文介绍并校验非空和中文字符。 */

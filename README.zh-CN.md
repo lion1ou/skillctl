@@ -11,10 +11,7 @@
 
 ## 安装
 
-默认从私有源安装（需先配置 scope）：
-
 ```bash
-npm config set @lion1ou:registry https://npm.n.lion1ou.tech:16666/
 npm install -g @lion1ou/skill-ctl
 ```
 
@@ -24,7 +21,7 @@ npm install -g @lion1ou/skill-ctl
 npx @lion1ou/skill-ctl
 ```
 
-Skill 源目录（如 `lion1ou-skills`）不随本包分发，请用绝对路径或 git 地址初始化：`skill-ctl init --source <path-or-git-url>`。统一说明见同级 [`../PRIVATE-NPM.md`](../PRIVATE-NPM.md)。
+Skill 源不随本包分发。用绝对路径或 git 地址初始化：`skill-ctl init --source <path-or-git-url>`。
 
 本地开发：
 
@@ -48,6 +45,7 @@ skill-ctl init --source https://github.com/owner/skill-catalog.git
 - 非交互环境必须提供 `--source`。
 - `--cache` 可选，默认是 `<skillctl>/.cache`。
 - 本机关联写在 `~/.config/skillctl/config.json`。
+- 可选偏好写在 `~/.config/skillctl/preferences.json`。把 [`skillctl.config.example.json`](skillctl.config.example.json) 复制过去再改。`gitProtocol` 取 `https` 或 `ssh`（`ssh` 会把 https 远程改写成 SSH）。`requireChineseDescription` 为 true 时，登记 skill 会要求介绍里有中文。`npmRegistry` 只给 `pnpm run publish:npm` 用。这个文件留在本机，不进仓库。
 
 源目录里如果还没有配置表，会生成：
 
@@ -119,6 +117,7 @@ skill-ctl manage --port 4173 --no-open
 - 详情页只展示 `SKILL.md`（或禁用文件），不列出 Skill 源中的其他源文件。读取路径必须落在已管理 Workspace、本地源目录或外部缓存根内。
 - 软链 skill 的文件启停会修改真实来源，并影响其他指向同一来源的链接，页面操作前会明确确认。
 - 服务只监听回环地址，API 使用启动时生成的随机令牌校验请求。
+- 使用次数只写在 `~/.config/skillctl/usage.json`。`skill-ctl hook install` 记录 Cursor、Codex 和 Claude 的读取，不上传。
 
 ## 源目录结构
 
@@ -129,7 +128,7 @@ skill-ctl manage --port 4173 --no-open
 └── skills/<skill-name>/
 ```
 
-注册表每项包含 `id`、`package`、`name`、中文 `description`、`version`、`source`、`type`（`local` 或 `external`）和 `enabled`（启用 / 未启用）。每个 skill 只属于一个分类。
+注册表每项包含 `id`、`package`、`name`、`description`、`version`、`source`、`type`（`local` 或 `external`）和 `enabled`（启用 / 未启用）。每个 skill 只属于一个分类。需要强制中文介绍时，在偏好里把 `requireChineseDescription` 设为 true。
 
 ## 缓存
 
@@ -191,11 +190,13 @@ pnpm test
 pnpm lint
 ```
 
-发布到 npm 的包包含 `bin/`、编译后的 `dist/` 和 `skills/skillctl-usage`，不会打包 catalog 源文件。
+发布到 npm 的包包含 `bin/`、编译后的 `dist/`、`skillctl.config.example.json` 和 `skills/skillctl-usage`，不会打包 catalog 源文件。
 
-版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后发布到私有源：
+版本说明见 [CHANGELOG.md](CHANGELOG.md)。提交后发布：
 
 ```bash
 pnpm test
 pnpm run publish:npm
 ```
+
+`publish:npm` 读取 `~/.config/skillctl/preferences.json` 的 `npmRegistry`。没有该文件时发布到 `https://registry.npmjs.org/`。

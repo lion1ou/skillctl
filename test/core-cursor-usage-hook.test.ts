@@ -33,6 +33,7 @@ test('安装 hook 时保留其他命令，卸载时只移除读取记录', () =>
     });
     assert.equal(installed.hookInstalled, true);
     assert.equal(installed.codexHookInstalled, true);
+    assert.equal(installed.claudeHookInstalled, true);
     assert.equal(installed.skillInstalled, true);
     assert.equal(installed.skillPath, join(repo.root, '.agents/skills/skillctl-usage'));
     assert.equal(existsSync(join(repo.root, '.cursor/skills/skillctl-usage/SKILL.md')), false);
@@ -50,6 +51,7 @@ test('安装 hook 时保留其他命令，卸载时只移除读取记录', () =>
     const removed = uninstallCursorUsageHook(repo.root);
     assert.equal(removed.hookInstalled, false);
     assert.equal(removed.codexHookInstalled, false);
+    assert.equal(removed.claudeHookInstalled, false);
     assert.equal(removed.skillInstalled, false);
     const after = JSON.parse(readFileSync(removed.hooksPath, 'utf8')) as {
       hooks: { preToolUse?: { command: string }[] };
@@ -57,6 +59,7 @@ test('安装 hook 时保留其他命令，卸载时只移除读取记录', () =>
     assert.deepEqual(after.hooks.preToolUse, [{ command: 'echo keep', matcher: 'Shell' }]);
     assert.equal(readCursorUsageHookStatus(repo.root).hookInstalled, false);
     assert.equal(readCursorUsageHookStatus(repo.root).codexHookInstalled, false);
+    assert.equal(readCursorUsageHookStatus(repo.root).claudeHookInstalled, false);
   } finally {
     repo.cleanup();
   }
@@ -96,6 +99,53 @@ test('安装 Codex hook 时保留其他命令，卸载时只移除读取记录',
       { matcher: '^Bash$', hooks: [{ type: 'command', command: 'echo keep' }] },
     ]);
     assert.equal(removed.codexHookInstalled, false);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('安装 Claude hook 时保留 settings.json 的其他字段，卸载时只移除读取记录', () => {
+  const repo = createTmpRepo('skillctl-claude-hook-');
+  try {
+    repo.writeFile('.claude/settings.json', JSON.stringify({
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:9' },
+      hooks: {
+        PreToolUse: [
+          { matcher: '^Write$', hooks: [{ type: 'command', command: 'echo keep' }] },
+        ],
+      },
+    }));
+    repo.writeFile('skill-template/SKILL.md', '---\nname: skillctl-usage\n---\n# usage\n');
+    const installed = installCursorUsageHook({
+      homeDir: repo.root,
+      nodePath: '/usr/bin/node',
+      cliEntry: '/opt/skill-ctl/bin/run.js',
+      skillTemplateDir: join(repo.root, 'skill-template'),
+    });
+    const settings = JSON.parse(readFileSync(installed.claudeHooksPath, 'utf8')) as {
+      env: { ANTHROPIC_BASE_URL: string };
+      hooks: { PreToolUse: { matcher?: string; hooks: { command: string }[] }[] };
+    };
+    assert.equal(settings.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:9');
+    assert.equal(installed.claudeHookInstalled, true);
+    assert.equal(existsSync(join(repo.root, '.claude/skills/skillctl-usage/SKILL.md')), true);
+    assert.deepEqual(settings.hooks.PreToolUse.map((group) => group.hooks.map((hook) => hook.command)), [
+      ['echo keep'],
+      [`/usr/bin/node ${join(repo.root, '.cursor/hooks/skillctl-usage-record.mjs')}`],
+    ]);
+    assert.equal(settings.hooks.PreToolUse[1]?.matcher, '^(?:Read|Grep|Bash)$');
+
+    const removed = uninstallCursorUsageHook(repo.root);
+    const after = JSON.parse(readFileSync(removed.claudeHooksPath, 'utf8')) as {
+      env: { ANTHROPIC_BASE_URL: string };
+      hooks: { PreToolUse: { matcher?: string; hooks: { command: string }[] }[] };
+    };
+    assert.equal(after.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:9');
+    assert.deepEqual(after.hooks.PreToolUse, [
+      { matcher: '^Write$', hooks: [{ type: 'command', command: 'echo keep' }] },
+    ]);
+    assert.equal(removed.claudeHookInstalled, false);
+    assert.equal(existsSync(join(repo.root, '.claude/skills/skillctl-usage/SKILL.md')), false);
   } finally {
     repo.cleanup();
   }
@@ -164,6 +214,44 @@ appendFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)
     assert.deepEqual(readFileSync(argsFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line)), [
       ['usage', 'record', '--name', 'skillctl-usage', '--path', '/Users/me/.agents/skills/skillctl-usage/SKILL.md', '--conversation', 'sess-1', '--quiet'],
       ['usage', 'record', '--name', 'openai-docs', '--path', '/Users/me/.codex/skills/.system/openai-docs/SKILL.md', '--conversation', 'sess-1', '--quiet'],
+    ]);
+  } finally {
+    repo.cleanup();
+  }
+});
+
+test('Claude hook 从 Read 的 file_path 记录 SKILL.md，并且不输出放行 JSON', () => {
+  const repo = createTmpRepo('skillctl-claude-hook-script-');
+  const recorder = join(repo.root, 'recorder.mjs');
+  const argsFile = join(repo.root, 'args.json');
+  repo.writeFile('recorder.mjs', `
+import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+`);
+  const script = join(repo.root, 'hook.mjs');
+  repo.writeFile('hook.mjs', buildUsageRecordHookScript(process.execPath, recorder));
+  const run = spawnSync(process.execPath, [script], {
+    input: JSON.stringify({
+      session_id: 'claude-sess',
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Read',
+      tool_input: { file_path: '/Users/me/.claude/skills/create-hook/SKILL.md' },
+    }),
+    encoding: 'utf8',
+  });
+  try {
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, '');
+    assert.deepEqual(JSON.parse(readFileSync(argsFile, 'utf8')), [
+      'usage',
+      'record',
+      '--name',
+      'create-hook',
+      '--path',
+      '/Users/me/.claude/skills/create-hook/SKILL.md',
+      '--conversation',
+      'claude-sess',
+      '--quiet',
     ]);
   } finally {
     repo.cleanup();

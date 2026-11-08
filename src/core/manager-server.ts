@@ -35,7 +35,6 @@ import {
   setManagedSkillEnabled,
 } from './skill-manager.js';
 import { getTarget, TARGETS, type TargetId } from './targets.js';
-import { htmlPageRenderer, type HtmlPageRenderer } from './telemetry.js';
 import {
   addAndBootstrapWorkspace,
   ensureCliInitializedFromProject,
@@ -50,6 +49,7 @@ import { installCursorUsageHook, readCursorUsageHookStatus, uninstallCursorUsage
 import { readSkillUsage, readSkillUsageSummary } from './skill-usage.js';
 
 const UI_ASSET_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../ui/assets');
+const PAGE_CSP = "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:";
 
 export interface ManagerServer {
   server: Server;
@@ -88,21 +88,20 @@ async function routeManagerRequest(
 ): Promise<void> {
   try {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1');
-    const page = htmlPageRenderer(options.env ?? process.env);
     if (request.method === 'GET' && url.pathname === '/') {
-      sendHtml(response, MANAGER_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
+      sendHtml(response, MANAGER_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
       return;
     }
     if (request.method === 'GET' && url.pathname === '/catalog') {
-      sendHtml(response, CATALOG_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
+      sendHtml(response, CATALOG_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
       return;
     }
     if (request.method === 'GET' && (url.pathname === '/catalog/skill' || url.pathname === '/skill')) {
-      sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
+      sendHtml(response, SKILL_DETAIL_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
       return;
     }
     if (request.method === 'GET' && url.pathname === '/usage') {
-      sendHtml(response, USAGE_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)), page);
+      sendHtml(response, USAGE_PAGE.replace('__SKILLCTL_TOKEN__', JSON.stringify(token)));
       return;
     }
     if (request.method === 'GET' && (
@@ -182,7 +181,7 @@ async function routeConfigApi(
   if (request.method === 'GET' && url.pathname === '/api/status') {
     ensureCliInitializedFromProject(process.cwd(), env);
     const config = peekCliConfig(env);
-    const cwdProject = readWorkspaceProject(process.cwd());
+    const cwdProject = readWorkspaceProject(process.cwd(), env);
     sendJson(response, {
       initialized: config !== null,
       configPath: resolveCliConfigPath(env),
@@ -577,13 +576,13 @@ function sendJson(response: ServerResponse, value: unknown): void {
 }
 
 /** 返回内嵌管理页面，并限制页面只能访问当前本地服务。 */
-function sendHtml(response: ServerResponse, html: string, page: HtmlPageRenderer): void {
+function sendHtml(response: ServerResponse, html: string): void {
   response.writeHead(200, {
     'content-type': 'text/html; charset=utf-8',
-    'content-security-policy': page.csp,
+    'content-security-policy': PAGE_CSP,
     'cache-control': 'no-store',
   });
-  response.end(page.render(html));
+  response.end(html);
 }
 
 /** 返回打包内静态资源，并允许浏览器短时缓存。 */

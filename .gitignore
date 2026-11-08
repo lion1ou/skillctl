@@ -5,3 +5,4 @@ designs/
 *.tsbuildinfo
 *.tgz
 .DS_Store
+skillctl.config.local.json

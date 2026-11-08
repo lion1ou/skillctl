@@ -431,13 +431,17 @@ test('使用情况接口返回本机读取汇总，并可以安装 hook', async 
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-skillctl-token': token },
       body: JSON.stringify({ action: 'install' }),
-    })).json() as { hookInstalled: boolean; codexHookInstalled: boolean; skillInstalled: boolean };
+    })).json() as { hookInstalled: boolean; codexHookInstalled: boolean; claudeHookInstalled: boolean; skillInstalled: boolean };
     assert.equal(installed.hookInstalled, true);
     assert.equal(installed.codexHookInstalled, true);
+    assert.equal(installed.claudeHookInstalled, true);
     assert.equal(installed.skillInstalled, true);
+    assert.equal(/fanta-report|track\.lion1ou\.tech/.test(html), false);
     assert.equal(existsSync(join(repo.root, '.cursor/hooks/skillctl-usage-record.mjs')), true);
     assert.equal(existsSync(join(repo.root, '.codex/hooks.json')), true);
+    assert.equal(existsSync(join(repo.root, '.claude/settings.json')), true);
     assert.equal(existsSync(join(repo.root, '.agents/skills/skillctl-usage/SKILL.md')), true);
+    assert.equal(existsSync(join(repo.root, '.claude/skills/skillctl-usage/SKILL.md')), true);
   } finally {
     await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
     repo.cleanup();

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { InstallMode } from './installer.js';
-import { toSshGitRemote } from './source-git.js';
+import { loadProductPreferences } from './product-preferences.js';
+import { normalizeGitRemote } from './source-git.js';
 import { getTarget, type TargetId } from './targets.js';
 
 export { toSshGitRemote } from './source-git.js';
@@ -26,12 +27,15 @@ export function workspaceProjectPath(workspaceRoot: string): string {
 }
 
 /** 读取 Workspace 项目配置；文件不存在时返回 null。 */
-export function readWorkspaceProject(workspaceRoot: string): WorkspaceProjectConfig | null {
+export function readWorkspaceProject(
+  workspaceRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): WorkspaceProjectConfig | null {
   const file = workspaceProjectPath(workspaceRoot);
   if (!existsSync(file)) return null;
   const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<WorkspaceProjectConfig>;
   if (raw.version !== 1) throw new Error(`无效的 Workspace 项目配置：${file}`);
-  return normalizeWorkspaceProject(raw);
+  return normalizeWorkspaceProject(raw, env);
 }
 
 /** 从 catalog 里按 id 或 name 解析要安装的 skill id。 */
@@ -67,6 +71,7 @@ export function listMissingProjectSkills(
 
 function normalizeWorkspaceProject(
   value: Partial<WorkspaceProjectConfig>,
+  env: NodeJS.ProcessEnv,
 ): WorkspaceProjectConfig {
   const pinnedTargetIds = Array.isArray(value.pinnedTargetIds)
     ? value.pinnedTargetIds.flatMap((id) => {
@@ -101,7 +106,10 @@ function normalizeWorkspaceProject(
     targets,
   };
   if (typeof value.sourceRemote === 'string' && value.sourceRemote.trim()) {
-    project.sourceRemote = toSshGitRemote(value.sourceRemote);
+    project.sourceRemote = normalizeGitRemote(
+      value.sourceRemote,
+      loadProductPreferences(env).gitProtocol,
+    );
   }
   return project;
 }

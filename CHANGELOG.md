@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- 管理页不再加载 fanta-report，也不再提供 `SKILLCTL_NO_TELEMETRY`。
+
+### Added
+
+- 本机偏好 `~/.config/skillctl/preferences.json`，模板为 `skillctl.config.example.json`。可配置 git 协议、是否要求中文介绍、发布用的 npm registry。
+- 使用统计 hook 支持 Claude Code（`~/.claude/settings.json`）。
+
 ## 1.3.3 — 2026-11-07
 
 ### Removed
