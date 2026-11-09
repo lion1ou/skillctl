@@ -2,14 +2,18 @@
 
 ## Unreleased
 
-### Removed
-
-- 管理页不再加载 fanta-report，也不再提供 `SKILLCTL_NO_TELEMETRY`。
+## 1.4.0 — 2026-11-09
 
 ### Added
 
+- Skill 源页可浏览 skills.sh 的 All Time / Trending (24h) / Hot 榜单与搜索结果，将外部 skill 登记进配置表，或登记后安装到已管理 Workspace。
+- 榜单与搜索结果在管理进程内缓存 30 分钟；切 Tab、翻页与搜索优先读缓存，点「刷新」才强制拉取最新。
 - 本机偏好 `~/.config/skillctl/preferences.json`，模板为 `skillctl.config.example.json`。可配置 git 协议、是否要求中文介绍、发布用的 npm registry。
 - 使用统计 hook 支持 Claude Code（`~/.claude/settings.json`）。
+
+### Removed
+
+- 管理页不再加载 fanta-report，也不再提供 `SKILLCTL_NO_TELEMETRY`。
 
 ## 1.3.3 — 2026-11-07
 

@@ -117,6 +117,35 @@ export const MANAGER_STYLES = `
     .usage-charts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(220px,.72fr);gap:14px;align-items:start;margin-bottom:14px}.usage-charts h2{margin:0 0 12px;font-size:14px}.usage-chart svg{width:100%;height:220px;display:block}
     .usage-share{display:flex;gap:12px;align-items:center}#usageShare .usage-share svg{width:148px;height:148px;flex:none}.usage-legend{display:grid;gap:4px;min-width:0}.usage-legend span{display:flex;gap:8px;align-items:center;min-width:0;font-size:12px;line-height:1.35}.usage-legend b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.usage-legend em{margin-left:auto;color:var(--muted);font-style:normal;flex:none}.usage-swatch{width:8px;height:8px;border-radius:2px;flex:none}
     .usage-table{width:100%;table-layout:fixed;border-collapse:collapse}.usage-count-col{width:4.5em}.usage-time-col{width:12em}.usage-path-col{width:240px}.usage-table th,.usage-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.usage-table th{color:var(--muted);font-size:12px;font-weight:600}.usage-table td:nth-child(3){white-space:nowrap}.usage-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.45 "Geist Mono","SF Mono",monospace;color:var(--muted)}.usage-skill{color:var(--text);font-weight:600;text-decoration:none}.usage-skill:hover{text-decoration:underline}
+    .remote{margin-bottom:14px}.remote-tabs{display:flex;gap:14px;margin:10px 0 12px;border-bottom:1px solid var(--line)}
+    .remote-tabs button{appearance:none;border:0;background:transparent;padding:0 0 8px;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);font:600 13px/1.2 inherit;cursor:pointer}
+    .remote-tabs button.active{color:var(--text);border-bottom-color:var(--text)}
+    .remote-tabs button:disabled{opacity:.45;cursor:default}
+    .remote-list.is-loading{position:relative;min-height:120px}
+    .remote-loading{display:flex;align-items:center;justify-content:center;gap:8px;min-height:120px;padding:18px 12px;color:var(--muted);font-size:13px}
+    .remote-loading::before{content:"";width:14px;height:14px;border:2px solid #EAEAEA;border-top-color:var(--text);border-radius:50%;animation:remote-spin .7s linear infinite;flex:none}
+    @keyframes remote-spin{to{transform:rotate(360deg)}}
+    .remote-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+    .remote-toolbar input{flex:1 1 220px;min-width:160px}.remote-toolbar .actions{display:flex;flex-wrap:nowrap;gap:8px;margin-left:auto;flex:none}
+    .remote-toolbar .actions>button{flex:none;min-width:0;width:auto;padding:0 12px;white-space:nowrap}
+    .remote-list{display:grid;gap:0;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+    .remote-row{display:grid;grid-template-columns:28px 36px 168px minmax(96px,160px) minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);min-height:36px}
+    .remote-row:last-child{border-bottom:0}.remote-row>input{width:16px;height:16px;margin:0;flex:none}
+    .remote-rank{color:var(--muted);font:12px/1 "Geist Mono","SF Mono",monospace}
+    .remote-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:var(--text);text-decoration:none}
+    .remote-name:hover{text-decoration:underline}
+    .remote-pkg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;text-decoration:none}
+    .remote-pkg:hover{text-decoration:underline;color:var(--text)}
+    .remote-intro{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;min-width:0}
+    .remote-meta{color:var(--muted);font:12px/1 "Geist Mono","SF Mono",monospace;white-space:nowrap}
+    .remote-empty{padding:18px 12px;color:var(--muted);text-align:center}
+    @media(max-width:860px){
+      .remote-row{grid-template-columns:28px 28px minmax(0,1fr) auto;gap:8px}
+      .remote-pkg,.remote-intro{display:none}
+    }
+    .card .path a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+    .install-log{display:none;max-height:180px;overflow:auto;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:6px;background:#FAFAFA;font:12px/1.45 "Geist Mono","SF Mono",monospace;white-space:pre-wrap}
+    .install-log.show{display:block}
     .sync{margin-bottom:14px}
     .sync-list{display:grid;gap:6px;max-height:228px;overflow:auto;margin:10px 0 0}
     .sync-list label{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:6px}

@@ -447,3 +447,104 @@ test('使用情况接口返回本机读取汇总，并可以安装 hook', async 
     repo.cleanup();
   }
 });
+
+test('远程榜单与搜索代理，并可登记；安装失败仍保留登记', async () => {
+  const repo = createTmpRepo('skillctl-remote-api-');
+  const env = {
+    HOME: repo.root,
+    XDG_CONFIG_HOME: join(repo.root, 'config'),
+  } as NodeJS.ProcessEnv;
+  const workspace = join(repo.root, 'project');
+  repo.mkdir('project');
+  initializeCliConfig({ sourceDir: join(repo.root, 'catalog'), env });
+  repo.writeFile(`catalog/${SKILLS_FILE}`, JSON.stringify({ version: 1, skills: [] }));
+  repo.writeFile(`catalog/${CATEGORIES_FILE}`, JSON.stringify({
+    version: 1,
+    categories: [{ id: 'common', name: '通用', description: '通用', skillIds: [] }],
+  }));
+  repo.mkdir('catalog/skills');
+
+  const remoteFetch: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('/api/skills/hot/0')) {
+      return new Response(JSON.stringify({
+        skills: [{ source: 'owner/repo', skillId: 'fresh', name: 'fresh', installs: 9, change: 2 }],
+        hasMore: false,
+      }));
+    }
+    if (url.includes('/api/search?')) {
+      return new Response(JSON.stringify({
+        skills: [{ id: 'owner/repo/fresh', name: 'fresh', installs: 9, source: 'owner/repo' }],
+      }));
+    }
+    return new Response('missing', { status: 404 });
+  };
+
+  const manager = await startManagerServer({
+    port: 0,
+    env,
+    pickWorkspace: async () => workspace,
+    remoteFetch,
+    inspectPackageSkills: () => [{ name: 'fresh', description: '远程介绍' }],
+    installCatalogSkills: async () => {
+      throw new Error('模拟安装失败');
+    },
+  });
+  try {
+    const html = await (await fetch(`${manager.url}/catalog`)).text();
+    const token = html.match(/const token="([^"]+)"/)?.[1];
+    assert.ok(token);
+    const request = (path: string, options: RequestInit = {}) => fetch(`${manager.url}${path}`, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        'x-skillctl-token': token,
+        ...options.headers,
+      },
+    });
+
+    await request('/api/workspaces/pick', { method: 'POST', body: '{}' });
+
+    const board = await (await request('/api/catalog/remote/leaderboard?view=hot&page=0')).json() as {
+      skills: Array<{ name: string; registered: boolean; change?: number }>;
+      hasMore: boolean;
+    };
+    assert.equal(board.hasMore, false);
+    assert.equal(board.skills[0]?.name, 'fresh');
+    assert.equal(board.skills[0]?.registered, false);
+    assert.equal(board.skills[0]?.change, 2);
+
+    const searched = await (await request('/api/catalog/remote/search?q=fr')).json() as {
+      skills: Array<{ name: string; package: string }>;
+    };
+    assert.equal(searched.skills[0]?.package, 'owner/repo');
+
+    const added = await (await request('/api/catalog/remote/add', {
+      method: 'POST',
+      body: JSON.stringify({
+        categoryId: 'common',
+        skills: [{ package: 'owner/repo', name: 'fresh' }],
+      }),
+    })).json() as { added: string[]; workspace: { catalog: { skills: { name: string }[] } } };
+    assert.deepEqual(added.added, ['fresh']);
+    assert.equal(added.workspace.catalog.skills.some((skill) => skill.name === 'fresh'), true);
+
+    const installBody = await (await request('/api/catalog/remote/add-install', {
+      method: 'POST',
+      body: JSON.stringify({
+        categoryId: 'common',
+        workspace,
+        target: 'cursor',
+        skills: [{ package: 'owner/repo', name: 'fresh' }],
+      }),
+    })).text();
+    assert.match(installBody, /模拟安装失败/);
+    const catalog = await (await request('/api/catalog')).json() as {
+      catalog: { skills: { name: string }[] };
+    };
+    assert.equal(catalog.catalog.skills.some((skill) => skill.name === 'fresh'), true);
+  } finally {
+    await new Promise<void>((resolvePromise) => manager.server.close(() => resolvePromise()));
+    repo.cleanup();
+  }
+});

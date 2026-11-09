@@ -107,6 +107,7 @@ skill-ctl manage --port 4173 --no-open
 
 **Skill 源 `/catalog`**
 
+- 页面上方可浏览 skills.sh 的 All Time / Trending (24h) / Hot 榜单与搜索结果，将外部 skill 加入配置表，或登记后安装到已管理 Workspace。榜单与搜索结果在管理进程内缓存 30 分钟；切 Tab、翻页与搜索优先读缓存，点「刷新」才会强制拉取最新。
 - 页头「路径配置」可关联 Skill 源（绝对路径或 git 地址）与缓存目录；选择本地目录后只填入输入框，不会直接保存。
 - 可视化编辑 `skillctl-skills.json` 与 `skillctl-categories.json`，可改分类、描述、安装启用开关，并把源目录中未登记的本地 skill 同步进配置表。这里的启用只影响 `install`，不会改已安装文件。
 - 点击卡片进入详情，读取配置表登记 Skill 的源 `SKILL.md`。外部 Skill 尚未缓存时显示「尚未准备」，不会自动下载。

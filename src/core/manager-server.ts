@@ -23,7 +23,12 @@ import {
   removeCatalogSkill,
   syncUnregisteredSkills,
 } from './catalog-editor.js';
-import { installCatalogSkills, spawnExternalSkillAdd } from './catalog-install.js';
+import { installCatalogSkills, spawnExternalSkillAdd, type CatalogInstallResult } from './catalog-install.js';
+import {
+  ensureSkillsEnabled,
+  registerRemoteSkills,
+  type RegisterRemoteSkillsDeps,
+} from './catalog-remote.js';
 import { resolveInstallMode } from './installer.js';
 import {
   loadInstalledSkillDetail,
@@ -34,6 +39,15 @@ import {
   scanInstalledWorkspace,
   setManagedSkillEnabled,
 } from './skill-manager.js';
+import { loadSkillCatalog } from './skill-registry.js';
+import {
+  fetchLeaderboardCached,
+  searchSkillsCached,
+} from './skills-source-cache.js';
+import {
+  type LeaderboardView,
+  type PackageSkill,
+} from './skills-source.js';
 import { getTarget, TARGETS, type TargetId } from './targets.js';
 import {
   addAndBootstrapWorkspace,
@@ -46,6 +60,7 @@ import { MANAGER_PAGE } from '../ui/manager-page.js';
 import { SKILL_DETAIL_PAGE } from '../ui/skill-detail-page.js';
 import { USAGE_PAGE } from '../ui/usage-page.js';
 import { installCursorUsageHook, readCursorUsageHookStatus, uninstallCursorUsageHook } from './cursor-usage-hook.js';
+import { loadProductPreferences } from './product-preferences.js';
 import { readSkillUsage, readSkillUsageSummary } from './skill-usage.js';
 
 const UI_ASSET_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../ui/assets');
@@ -60,6 +75,9 @@ interface ManagerServerOptions {
   port: number;
   env?: NodeJS.ProcessEnv;
   pickWorkspace?: (kind?: DirectoryPickKind) => Promise<string | null>;
+  remoteFetch?: typeof fetch;
+  inspectPackageSkills?: (packageId: string) => PackageSkill[];
+  installCatalogSkills?: typeof installCatalogSkills;
 }
 
 /** 在本机回环地址启动管理服务，并用随机令牌保护写操作与扫描结果。 */
@@ -118,7 +136,7 @@ async function routeManagerRequest(
     if (await routeWorkspaceApi(request, response, url, options)) return;
     if (await routeInstalledApi(request, response, url, options.env)) return;
     if (await routeUsageApi(request, response, url, options.env)) return;
-    if (await routeCatalogApi(request, response, url, options.env)) return;
+    if (await routeCatalogApi(request, response, url, options)) return;
     sendText(response, 404, 'Not Found');
   } catch (error) {
     if (response.headersSent) {
@@ -407,16 +425,26 @@ async function routeInstalledApi(
   return false;
 }
 
-/** 处理配置表的读取、编辑和本地 skill 同步。 */
+/** 处理配置表的读取、编辑、本地同步，以及 skills.sh 远程浏览与登记。 */
 async function routeCatalogApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  env: NodeJS.ProcessEnv = process.env,
+  options: ManagerServerOptions,
 ): Promise<boolean> {
+  const env = options.env ?? process.env;
   const sourceDir = loadCliConfig(env).sourceDir;
+  const remoteFetch = options.remoteFetch ?? fetch;
+  const inspectDeps: RegisterRemoteSkillsDeps = {
+    inspectPackageSkills: options.inspectPackageSkills,
+  };
+  const runInstall = options.installCatalogSkills ?? installCatalogSkills;
+
   if (request.method === 'GET' && url.pathname === '/api/catalog') {
-    sendJson(response, loadCatalogWorkspace(sourceDir));
+    sendJson(response, {
+      ...loadCatalogWorkspace(sourceDir),
+      requireChineseDescription: loadProductPreferences(env).requireChineseDescription,
+    });
     return true;
   }
   if (request.method === 'GET' && url.pathname === '/api/catalog/skills/detail') {
@@ -466,7 +494,159 @@ async function routeCatalogApi(
     sendJson(response, syncUnregisteredSkills(sourceDir, readString(input.categoryId, 'categoryId'), skillIds));
     return true;
   }
+  if (request.method === 'GET' && url.pathname === '/api/catalog/remote/leaderboard') {
+    const view = readLeaderboardView(url.searchParams.get('view'));
+    const page = readPage(url.searchParams.get('page'));
+    const force = readForceFlag(url.searchParams.get('force'));
+    const pageResult = await fetchLeaderboardCached(view, page, {
+      request: remoteFetch,
+      force,
+    });
+    sendJson(response, {
+      view,
+      page,
+      cached: pageResult.cached,
+      cachedAt: pageResult.cachedAt,
+      hasMore: pageResult.hasMore,
+      skills: annotateRegistered(sourceDir, pageResult.skills),
+    });
+    return true;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/catalog/remote/search') {
+    const query = readString(url.searchParams.get('q'), 'q');
+    if (query.length < 2) throw new Error('搜索词至少 2 个字符');
+    const limitRaw = url.searchParams.get('limit');
+    const limit = limitRaw == null || limitRaw === '' ? 30 : Number(limitRaw);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      throw new Error('limit 必须是 1–200 的整数');
+    }
+    const force = readForceFlag(url.searchParams.get('force'));
+    const results = await searchSkillsCached(query, limit, {
+      request: remoteFetch,
+      force,
+    });
+    sendJson(response, {
+      query,
+      cached: results.cached,
+      cachedAt: results.cachedAt,
+      skills: annotateRegistered(sourceDir, results.skills.map((item) => ({
+        name: item.name,
+        package: item.package,
+        installs: item.installs,
+        ...(item.description ? { description: item.description } : {}),
+        ...(item.isOfficial ? { isOfficial: true } : {}),
+      }))),
+    });
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/catalog/remote/add') {
+    const input = await readJson(request, 64 * 1024);
+    const result = registerRemoteSkills(sourceDir, {
+      categoryId: readString(input.categoryId, 'categoryId'),
+      skills: readRemoteSkillRefs(input.skills),
+    }, inspectDeps);
+    sendJson(response, {
+      ...result,
+      workspace: loadCatalogWorkspace(sourceDir),
+    });
+    return true;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/catalog/remote/add-install') {
+    const input = await readJson(request, 64 * 1024);
+    const selected = readRemoteSkillRefs(input.skills);
+    const registerResult = registerRemoteSkills(sourceDir, {
+      categoryId: readString(input.categoryId, 'categoryId'),
+      skills: selected,
+    }, inspectDeps);
+    const skillIds = [...new Set(selected.map((item) => item.name))];
+    ensureSkillsEnabled(sourceDir, skillIds);
+    const workspace = readManagedWorkspace(input.workspace, env);
+    const target = readString(input.target, 'target') as TargetId;
+    getTarget(target);
+    const mode = resolveInstallMode(
+      typeof input.mode === 'string' ? input.mode : undefined,
+    );
+    const { cacheDir } = loadCliConfig(env);
+    const emit = beginNdjson(response);
+    try {
+      emit({ type: 'register', ...registerResult });
+      const installResult: CatalogInstallResult = await runInstall({
+        sourceDir,
+        cacheDir,
+        scopeRoot: workspace,
+        targets: [target],
+        selection: { skillIds },
+        mode,
+        force: input.force === true,
+        onLog: (line) => emit({ type: 'log', line }),
+        runExternalPrepare: async (prepare) => {
+          emit({
+            type: 'log',
+            line: `准备外部包 ${prepare.index}/${prepare.total}：${prepare.packageId}（${prepare.skillNames.join(', ')}）`,
+          });
+          await spawnExternalSkillAdd(
+            prepare.packageId,
+            prepare.skillNames,
+            prepare.cachePackageDir,
+            (line) => emit({ type: 'log', line }),
+          );
+        },
+      });
+      emit({
+        type: 'result',
+        register: registerResult,
+        ...scanInstalledWorkspace(workspace),
+        install: installResult,
+        workspace: loadCatalogWorkspace(sourceDir),
+      });
+    } catch (error) {
+      emit({
+        type: 'error',
+        message: error instanceof Error ? error.message : '安装失败',
+        register: registerResult,
+        workspace: loadCatalogWorkspace(sourceDir),
+      });
+    }
+    response.end();
+    return true;
+  }
   return false;
+}
+
+function annotateRegistered<T extends { name: string }>(
+  sourceDir: string,
+  skills: T[],
+): Array<T & { registered: boolean }> {
+  const known = new Set(loadSkillCatalog(sourceDir).skills.map((skill) => skill.name));
+  return skills.map((skill) => ({ ...skill, registered: known.has(skill.name) }));
+}
+
+function readLeaderboardView(value: string | null): LeaderboardView {
+  if (value === 'all-time' || value === 'trending' || value === 'hot') return value;
+  throw new Error('view 必须是 all-time、trending 或 hot');
+}
+
+function readPage(value: string | null): number {
+  const page = value == null || value === '' ? 0 : Number(value);
+  if (!Number.isInteger(page) || page < 0) throw new Error('page 必须是非负整数');
+  return page;
+}
+
+function readForceFlag(value: string | null): boolean {
+  return value === '1' || value === 'true';
+}
+
+function readRemoteSkillRefs(value: unknown): Array<{ package: string; name: string; description?: string }> {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('请至少选择一个远程 skill');
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('skills 项必须是对象');
+    const record = item as Record<string, unknown>;
+    return {
+      package: readString(record.package, 'package'),
+      name: readString(record.name, 'name'),
+      description: optionalString(record.description),
+    };
+  });
 }
 
 function readManagedWorkspace(value: unknown, env: NodeJS.ProcessEnv): string {

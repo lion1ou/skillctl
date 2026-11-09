@@ -1,3 +1,4 @@
+import { defaultInstallMode, supportsSymlinkInstall } from '../core/installer.js';
 import {
   INITIALIZATION_SCRIPT,
   MANAGER_STYLES,
@@ -5,6 +6,10 @@ import {
   renderManagerNav,
 } from './manager-chrome.js';
 import { catalogListStateKey, parseCatalogListState } from './list-state.js';
+
+const INSTALL_MODE_OPTIONS = supportsSymlinkInstall()
+  ? `<option value="symlink"${defaultInstallMode() === 'symlink' ? ' selected' : ''}>软链</option><option value="copy"${defaultInstallMode() === 'copy' ? ' selected' : ''}>复制</option>`
+  : '<option value="copy" selected>复制</option>';
 
 /** 将 SKILL.md 的 YAML frontmatter 与 Markdown 正文分开。 */
 export function splitSkillDocument(content: string): { frontmatter: string; body: string } {
@@ -136,6 +141,27 @@ export const CATALOG_PAGE = `<!doctype html>
     </div>
   </header>
   <div class="notice" id="notice"></div>
+  <section class="remote panel" id="remotePanel">
+    <div class="panel-heading">
+      <h2>从 skills.sh 添加</h2>
+      <span class="subtitle" id="remoteStatus">加载榜单…</span>
+    </div>
+    <div class="remote-tabs" role="tablist" aria-label="skills.sh 榜单">
+      <button type="button" class="active" data-remote-view="all-time">All Time</button>
+      <button type="button" data-remote-view="trending">Trending (24h)</button>
+      <button type="button" data-remote-view="hot">Hot</button>
+    </div>
+    <div class="remote-toolbar">
+      <input id="remoteSearch" placeholder="搜索 skills.sh（至少 2 字）" autocomplete="off">
+      <div class="actions">
+        <button type="button" class="ghost" id="remoteRefreshButton" title="忽略半小时缓存，重新拉取">刷新</button>
+        <button type="button" class="ghost" id="remoteLoadMore" hidden>更多</button>
+        <button type="button" id="remoteAddButton" disabled title="登记到配置表">添加</button>
+        <button type="button" class="positive" id="remoteAddInstallButton" disabled title="登记并安装到 Workspace">安装</button>
+      </div>
+    </div>
+    <div class="remote-list" id="remoteList"><div class="remote-empty">正在读取 skills.sh…</div></div>
+  </section>
   <section class="sync panel" id="syncPanel" hidden>
     <h2>待同步 Skill</h2>
     <p class="subtitle" id="syncHint"></p>
@@ -215,11 +241,30 @@ export const CATALOG_PAGE = `<!doctype html>
       </div>
     </form>
   </dialog>
+  <dialog id="remoteAddDialog">
+    <form method="dialog">
+      <h2 id="remoteAddTitle">添加</h2>
+      <p class="subtitle" id="remoteAddHint"></p>
+      <div class="field"><span>分类</span><select id="remoteCategory"></select></div>
+      <div id="remoteDescriptionFields"></div>
+      <div id="remoteInstallFields" hidden>
+        <div class="field"><span>Workspace</span><select id="remoteWorkspace"></select></div>
+        <div class="field"><span>Agent</span><select id="remoteTarget"></select></div>
+        <div class="field"><span>安装模式</span><select id="remoteInstallMode">${INSTALL_MODE_OPTIONS}</select></div>
+        <label class="check-row"><input id="remoteInstallForce" type="checkbox"><span>覆盖目标已有内容</span></label>
+        <pre class="install-log" id="remoteInstallLog"></pre>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="confirmRemoteAddButton">确认</button>
+        <button type="submit" class="ghost" id="cancelRemoteAddButton">取消</button>
+      </div>
+    </form>
+  </dialog>
 </main>
 ${renderInitializationDialog()}
 <script>
 const token=__SKILLCTL_TOKEN__;
-let workspace={sourceDir:'',catalog:{skills:[],categories:[]},unregistered:[],uncategorized:[]};
+let workspace={sourceDir:'',catalog:{skills:[],categories:[]},unregistered:[],uncategorized:[],requireChineseDescription:false};
 let currentCategory='';
 let isUpdating=false;
 const notice=document.querySelector('#notice');
@@ -232,9 +277,25 @@ const typeFilter=document.querySelector('#typeFilter');
 const categoryScope=document.querySelector('#categoryScope');
 const categoryDialog=document.querySelector('#categoryDialog');
 const confirmDialog=document.querySelector('#confirmDialog');
+const remoteAddDialog=document.querySelector('#remoteAddDialog');
 let confirmAction=null;
 let selectedCatalogSkills=new Set();
 let usageByName=new Map();
+let remoteView='all-time';
+let remotePage=0;
+let remoteHasMore=false;
+let remoteMode='leaderboard';
+let remoteSkills=[];
+let remoteSelected=new Map();
+let remoteAction='add';
+let managedWorkspaces=[];
+let managedTargets=[];
+let remoteSearchTimer=0;
+let remoteLoading=false;
+let remoteRequestId=0;
+let remoteForceNext=false;
+let remoteCachedAt=0;
+let remoteWasCached=false;
 const catalogViewKey='skillctl:view-mode:catalog';
 let catalogViewMode=localStorage.getItem(catalogViewKey)==='list'?'list':'card';
 const catalogSortKey='skillctl:sort:catalog';
@@ -366,7 +427,13 @@ function render(){
     const checked=selectedCatalogSkills.has(skill.id)?' checked':'';
     const selectBox='<label class="skill-select"><input type="checkbox" data-select-catalog="'+escapeHtml(skill.id)+'"'+checked+' aria-label="选择 '+escapeHtml(skill.name)+'"></label>';
     const categorySelect='<select class="card-category" data-move="'+escapeHtml(skill.id)+'" title="所属分类"><option value="" '+(!category?'selected':'')+'>未分类</option>'+options+'</select>';
-    return '<article class="card" data-skill-detail="'+escapeHtml(skill.id)+'"><div class="card-head"><div class="skill-title">'+selectBox+'<div class="skill-meta"><div class="name" data-toggle-select="'+escapeHtml(skill.id)+'">'+escapeHtml(skill.name)+'</div>'+categorySelect+'</div></div><div class="usage-marks">'+usageMarks(skill)+'</div></div><p class="description" data-open-detail="'+escapeHtml(skill.id)+'" title="'+escapeHtml(skill.description)+'"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span> '+escapeHtml(skill.description)+'</p><p class="path">'+escapeHtml(skill.source)+' · '+escapeHtml(skill.package)+'</p></article>';
+    const sourcePath=skill.type==='external'&&/^https?:\\/\\//i.test(skill.source||'')
+      ?('<a href="'+escapeHtml(skill.source)+'" target="_blank" rel="noreferrer">'+escapeHtml(skill.source)+'</a>')
+      :escapeHtml(skill.source);
+    const packagePath=skill.type==='external'&&/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(skill.package||'')
+      ?('<a href="https://github.com/'+escapeHtml(skill.package)+'" target="_blank" rel="noreferrer">'+escapeHtml(skill.package)+'</a>')
+      :escapeHtml(skill.package);
+    return '<article class="card" data-skill-detail="'+escapeHtml(skill.id)+'"><div class="card-head"><div class="skill-title">'+selectBox+'<div class="skill-meta"><div class="name" data-toggle-select="'+escapeHtml(skill.id)+'">'+escapeHtml(skill.name)+'</div>'+categorySelect+'</div></div><div class="usage-marks">'+usageMarks(skill)+'</div></div><p class="description" data-open-detail="'+escapeHtml(skill.id)+'" title="'+escapeHtml(skill.description)+'"><span class="badge '+escapeHtml(skill.type)+'">'+escapeHtml(skill.type)+'</span> '+escapeHtml(skill.description)+'</p><p class="path">'+sourcePath+' · '+packagePath+'</p></article>';
   }).join('');
 }
 
@@ -578,6 +645,344 @@ grid.addEventListener('change',async(event)=>{
   await mutate('/api/catalog/skills',{method:'PATCH',body:JSON.stringify({id:select.dataset.move,categoryId:select.value})},'已更新分类');
 });
 [search,enabledFilter,typeFilter,categoryScope].forEach((element)=>element.addEventListener('input',render));
+
+function formatInstalls(value){
+  const count=Number(value)||0;
+  if(count>=1e6)return (count/1e6).toFixed(1).replace(/\\.0$/,'')+'M';
+  if(count>=1e3)return (count/1e3).toFixed(1).replace(/\\.0$/,'')+'K';
+  return String(count);
+}
+function selectedRemoteSkills(){
+  return [...remoteSelected.values()];
+}
+function updateRemoteActions(){
+  const count=remoteSelected.size;
+  const busy=remoteLoading||isUpdating;
+  document.querySelector('#remoteAddButton').disabled=count===0||busy;
+  document.querySelector('#remoteAddInstallButton').disabled=count===0||busy;
+  document.querySelector('#remoteLoadMore').disabled=busy||!remoteHasMore;
+  document.querySelector('#remoteRefreshButton').disabled=remoteLoading;
+  document.querySelector('#remoteSearch').disabled=remoteLoading;
+  document.querySelectorAll('.remote-tabs button').forEach((button)=>{
+    button.disabled=remoteLoading;
+  });
+}
+function formatCacheHint(cached, cachedAt){
+  if(!cachedAt)return '';
+  const ageMin=Math.max(0, Math.floor((Date.now()-cachedAt)/60000));
+  if(cached)return ageMin<=0?' · 缓存':' · 缓存 '+ageMin+' 分钟前';
+  return ' · 刚更新';
+}
+function setRemoteLoading(isLoading,message){
+  remoteLoading=isLoading;
+  const list=document.querySelector('#remoteList');
+  const status=document.querySelector('#remoteStatus');
+  list.classList.toggle('is-loading',isLoading);
+  if(isLoading){
+    status.textContent=message||'加载中…';
+    list.innerHTML='<div class="remote-loading">'+(message||'加载中…')+'</div>';
+    document.querySelector('#remoteLoadMore').hidden=true;
+  }
+  updateRemoteActions();
+}
+function remoteSkillUrl(skill){
+  return 'https://skills.sh/'+encodeURI(skill.package)+'/'+encodeURIComponent(skill.name);
+}
+function remotePackageUrl(skill){
+  return /^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(skill.package||'')
+    ?('https://github.com/'+skill.package)
+    :remoteSkillUrl(skill);
+}
+function remoteIntro(skill){
+  if(typeof skill.description==='string'&&skill.description.trim())return skill.description.trim();
+  const parts=[];
+  if(skill.isOfficial)parts.push('官方');
+  if(skill.registered)parts.push('已登记');
+  if(remoteView==='hot'&&typeof skill.change==='number')parts.push('较昨日 '+(skill.change>=0?'+':'')+skill.change);
+  if(typeof skill.installs==='number')parts.push('安装量 '+formatInstalls(skill.installs));
+  return parts.join(' · ')||'来自 skills.sh';
+}
+function renderRemoteList(){
+  const list=document.querySelector('#remoteList');
+  const status=document.querySelector('#remoteStatus');
+  const loadMore=document.querySelector('#remoteLoadMore');
+  if(remoteSkills.length===0){
+    list.innerHTML='<div class="remote-empty">'+(remoteMode==='search'?'没有匹配的远程 Skill':'暂无榜单数据')+'</div>';
+  }else{
+    list.innerHTML=remoteSkills.map((skill,index)=>{
+      const key=skill.package+'/'+skill.name;
+      const checked=remoteSelected.has(key)?' checked':'';
+      const intro=remoteIntro(skill);
+      const meta=remoteView==='hot'&&typeof skill.change==='number'
+        ?((skill.change>=0?'+':'')+skill.change)
+        :formatInstalls(skill.installs);
+      return '<div class="remote-row" title="'+escapeHtml(intro)+'"><input type="checkbox" data-remote-key="'+escapeHtml(key)+'"'+checked+' aria-label="选择 '+escapeHtml(skill.name)+'"><span class="remote-rank">'+(index+1)+'</span><a class="remote-name" href="'+escapeHtml(remoteSkillUrl(skill))+'" target="_blank" rel="noreferrer">'+escapeHtml(skill.name)+'</a><a class="remote-pkg" href="'+escapeHtml(remotePackageUrl(skill))+'" target="_blank" rel="noreferrer">'+escapeHtml(skill.package)+'</a><span class="remote-intro">'+escapeHtml(intro)+'</span><span class="remote-meta">'+escapeHtml(meta)+'</span></div>';
+    }).join('');
+  }
+  status.textContent=(remoteMode==='search'
+    ?('搜索结果 '+remoteSkills.length)
+    :(remoteView+' · '+remoteSkills.length+(remoteHasMore?'+':'')))
+    +formatCacheHint(remoteWasCached, remoteCachedAt);
+  loadMore.hidden=remoteMode!=='leaderboard'||!remoteHasMore;
+  updateRemoteActions();
+}
+async function loadRemoteLeaderboard(reset){
+  const requestId=++remoteRequestId;
+  const force=remoteForceNext;
+  remoteForceNext=false;
+  if(reset){
+    remotePage=0;
+    remoteSkills=[];
+    remoteHasMore=false;
+    setRemoteLoading(true,force?'强制刷新…':'加载榜单…');
+  }else{
+    document.querySelector('#remoteStatus').textContent='加载更多…';
+    document.querySelector('#remoteLoadMore').disabled=true;
+  }
+  try{
+    const data=await request('/api/catalog/remote/leaderboard?view='+encodeURIComponent(remoteView)+'&page='+remotePage+(force?'&force=1':''));
+    if(requestId!==remoteRequestId)return;
+    remoteMode='leaderboard';
+    remoteHasMore=data.hasMore===true;
+    remoteWasCached=data.cached===true;
+    remoteCachedAt=typeof data.cachedAt==='number'?data.cachedAt:Date.now();
+    remoteSkills=reset?[...(data.skills||[])]:[...remoteSkills,...(data.skills||[])];
+    remoteLoading=false;
+    renderRemoteList();
+  }catch(error){
+    if(requestId!==remoteRequestId)return;
+    remoteLoading=false;
+    updateRemoteActions();
+    throw error;
+  }
+}
+async function loadRemoteSearch(query){
+  const requestId=++remoteRequestId;
+  const force=remoteForceNext;
+  remoteForceNext=false;
+  setRemoteLoading(true,force?'强制刷新…':'搜索中…');
+  try{
+    const data=await request('/api/catalog/remote/search?q='+encodeURIComponent(query)+'&limit=30'+(force?'&force=1':''));
+    if(requestId!==remoteRequestId)return;
+    remoteMode='search';
+    remoteHasMore=false;
+    remoteWasCached=data.cached===true;
+    remoteCachedAt=typeof data.cachedAt==='number'?data.cachedAt:Date.now();
+    remoteSkills=data.skills||[];
+    remoteLoading=false;
+    renderRemoteList();
+  }catch(error){
+    if(requestId!==remoteRequestId)return;
+    remoteLoading=false;
+    updateRemoteActions();
+    throw error;
+  }
+}
+function fillRemoteCategoryOptions(){
+  const select=document.querySelector('#remoteCategory');
+  const categories=workspace.catalog.categories||[];
+  select.innerHTML=categories.map((category)=>'<option value="'+escapeHtml(category.id)+'">'+escapeHtml(category.name)+'</option>').join('');
+  if(currentCategory&&currentCategory!=='__uncategorized__'&&categories.some((item)=>item.id===currentCategory)){
+    select.value=currentCategory;
+  }
+}
+function openRemoteDialog(action){
+  const skills=selectedRemoteSkills();
+  if(skills.length===0){showNotice('请先选择远程 Skill');return}
+  remoteAction=action;
+  document.querySelector('#remoteAddTitle').textContent=action==='install'?'安装':'添加';
+  document.querySelector('#remoteAddHint').textContent='已选 '+skills.length+' 个 Skill';
+  fillRemoteCategoryOptions();
+  const fields=document.querySelector('#remoteDescriptionFields');
+  const needChinese=workspace.requireChineseDescription===true;
+  fields.innerHTML=skills.map((skill)=>{
+    const needs=needChinese;
+    if(!needs)return '';
+    return '<div class="field"><span>'+escapeHtml(skill.name)+' 中文介绍</span><input data-remote-desc="'+escapeHtml(skill.package+'/'+skill.name)+'" placeholder="请输入中文介绍" required></div>';
+  }).join('');
+  const installFields=document.querySelector('#remoteInstallFields');
+  installFields.hidden=action!=='install';
+  document.querySelector('#remoteInstallLog').textContent='';
+  document.querySelector('#remoteInstallLog').classList.remove('show');
+  if(action==='install'){
+    const workspaceSelect=document.querySelector('#remoteWorkspace');
+    workspaceSelect.innerHTML=managedWorkspaces.map((item)=>'<option value="'+escapeHtml(item.path)+'">'+escapeHtml(item.path)+'</option>').join('');
+    document.querySelector('#remoteTarget').innerHTML=managedTargets.map((item)=>'<option value="'+escapeHtml(item.id)+'">'+escapeHtml(item.id)+'</option>').join('');
+  }
+  remoteAddDialog.showModal();
+}
+async function loadManagedTargets(){
+  const data=await request('/api/workspaces');
+  managedWorkspaces=data.workspaces||[];
+  managedTargets=data.targets||[];
+}
+async function streamRemoteAddInstall(body){
+  const response=await fetch('/api/catalog/remote/add-install',{
+    method:'POST',
+    headers:{'x-skillctl-token':token,'content-type':'application/json'},
+    body:JSON.stringify(body),
+  });
+  if(!response.ok)throw new Error(await response.text());
+  const log=document.querySelector('#remoteInstallLog');
+  log.classList.add('show');
+  const reader=response.body.getReader();
+  const decoder=new TextDecoder();
+  let buffer='';
+  let finalEvent=null;
+  while(true){
+    const {value,done}=await reader.read();
+    if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    const lines=buffer.split('\\n');
+    buffer=lines.pop()||'';
+    for(const line of lines){
+      if(!line.trim())continue;
+      const event=JSON.parse(line);
+      if(event.type==='log'){
+        log.textContent=(log.textContent?log.textContent+'\\n':'')+event.line;
+        log.scrollTop=log.scrollHeight;
+      }else if(event.type==='register'){
+        log.textContent=(log.textContent?log.textContent+'\\n':'')+'登记：新增 '+(event.added||[]).length+'，跳过 '+(event.skipped||[]).length+'，失败 '+(event.failed||[]).length;
+      }else if(event.type==='error'){
+        finalEvent=event;
+        if(event.workspace)workspace=event.workspace;
+        throw new Error(event.message||'安装失败');
+      }else if(event.type==='result'){
+        finalEvent=event;
+      }
+    }
+  }
+  if(!finalEvent)throw new Error('安装未返回结果');
+  return finalEvent;
+}
+document.querySelector('.remote-tabs').addEventListener('click',async(event)=>{
+  const button=event.target.closest('button[data-remote-view]');
+  if(!button||isUpdating||remoteLoading)return;
+  if(button.dataset.remoteView===remoteView&&remoteMode==='leaderboard'&&!document.querySelector('#remoteSearch').value.trim())return;
+  remoteView=button.dataset.remoteView;
+  document.querySelectorAll('.remote-tabs button').forEach((item)=>item.classList.toggle('active',item===button));
+  document.querySelector('#remoteSearch').value='';
+  try{await loadRemoteLeaderboard(true)}catch(error){
+    document.querySelector('#remoteList').innerHTML='<div class="remote-empty">'+escapeHtml(error instanceof Error?error.message:'加载榜单失败')+'</div>';
+    document.querySelector('#remoteStatus').textContent='加载失败';
+    showNotice(error instanceof Error?error.message:'加载榜单失败');
+  }
+});
+document.querySelector('#remoteSearch').addEventListener('input',()=>{
+  clearTimeout(remoteSearchTimer);
+  remoteSearchTimer=setTimeout(async()=>{
+    if(remoteLoading)return;
+    const query=document.querySelector('#remoteSearch').value.trim();
+    try{
+      if(query.length<2)await loadRemoteLeaderboard(true);
+      else await loadRemoteSearch(query);
+    }catch(error){
+      document.querySelector('#remoteList').innerHTML='<div class="remote-empty">'+escapeHtml(error instanceof Error?error.message:'远程搜索失败')+'</div>';
+      document.querySelector('#remoteStatus').textContent='加载失败';
+      showNotice(error instanceof Error?error.message:'远程搜索失败');
+    }
+  },250);
+});
+document.querySelector('#remoteRefreshButton').addEventListener('click',async()=>{
+  if(isUpdating||remoteLoading)return;
+  remoteForceNext=true;
+  const query=document.querySelector('#remoteSearch').value.trim();
+  try{
+    if(remoteMode==='search'&&query.length>=2)await loadRemoteSearch(query);
+    else await loadRemoteLeaderboard(true);
+  }catch(error){
+    document.querySelector('#remoteList').innerHTML='<div class="remote-empty">'+escapeHtml(error instanceof Error?error.message:'刷新失败')+'</div>';
+    document.querySelector('#remoteStatus').textContent='刷新失败';
+    showNotice(error instanceof Error?error.message:'刷新失败');
+  }
+});
+document.querySelector('#remoteLoadMore').addEventListener('click',async()=>{
+  if(isUpdating||remoteLoading||!remoteHasMore)return;
+  remotePage+=1;
+  try{await loadRemoteLeaderboard(false)}catch(error){
+    remotePage=Math.max(0,remotePage-1);
+    updateRemoteActions();
+    showNotice(error instanceof Error?error.message:'加载更多失败');
+  }
+});
+document.querySelector('#remoteList').addEventListener('change',(event)=>{
+  const input=event.target.closest('input[data-remote-key]');
+  if(!input)return;
+  const skill=remoteSkills.find((item)=>(item.package+'/'+item.name)===input.dataset.remoteKey);
+  if(!skill)return;
+  if(input.checked)remoteSelected.set(input.dataset.remoteKey,skill);
+  else remoteSelected.delete(input.dataset.remoteKey);
+  updateRemoteActions();
+});
+document.querySelector('#remoteAddButton').addEventListener('click',()=>openRemoteDialog('add'));
+document.querySelector('#remoteAddInstallButton').addEventListener('click',async()=>{
+  try{
+    await loadManagedTargets();
+    if(managedWorkspaces.length===0){showNotice('请先在已安装页添加 Workspace');return}
+    openRemoteDialog('install');
+  }catch(error){showNotice(error instanceof Error?error.message:'读取 Workspace 失败')}
+});
+document.querySelector('#confirmRemoteAddButton').addEventListener('click',async()=>{
+  if(isUpdating)return;
+  const skills=selectedRemoteSkills().map((skill)=>{
+    const key=skill.package+'/'+skill.name;
+    const input=document.querySelector('#remoteDescriptionFields input[data-remote-desc="'+CSS.escape(key)+'"]');
+    const description=input?input.value.trim():'';
+    return {package:skill.package,name:skill.name,description:description||undefined};
+  });
+  if(workspace.requireChineseDescription===true){
+    for(const skill of skills){
+      if(!skill.description||!/[\\u4e00-\\u9fff]/.test(skill.description)){
+        showNotice('请为 '+skill.name+' 填写中文介绍');
+        return;
+      }
+    }
+  }
+  const categoryId=document.querySelector('#remoteCategory').value;
+  if(!categoryId){showNotice('请选择分类');return}
+  isUpdating=true;
+  document.querySelector('#confirmRemoteAddButton').disabled=true;
+  document.querySelector('#cancelRemoteAddButton').disabled=true;
+  try{
+    if(remoteAction==='add'){
+      const result=await request('/api/catalog/remote/add',{method:'POST',body:JSON.stringify({categoryId,skills})});
+      workspace=result.workspace;
+      showNotice('已登记 '+(result.added||[]).length+' 个；跳过 '+(result.skipped||[]).length+' 个；失败 '+(result.failed||[]).length+' 个',true);
+      remoteSelected.clear();
+      remoteAddDialog.close();
+      render();
+      if(remoteMode==='search'){
+        const query=document.querySelector('#remoteSearch').value.trim();
+        if(query.length>=2)await loadRemoteSearch(query);
+        else await loadRemoteLeaderboard(true);
+      }else await loadRemoteLeaderboard(true);
+    }else{
+      const event=await streamRemoteAddInstall({
+        categoryId,
+        skills,
+        workspace:document.querySelector('#remoteWorkspace').value,
+        target:document.querySelector('#remoteTarget').value,
+        mode:document.querySelector('#remoteInstallMode').value,
+        force:document.querySelector('#remoteInstallForce').checked,
+      });
+      if(event.workspace)workspace=event.workspace;
+      showNotice('登记并安装已完成（安装失败时登记仍会保留）',true);
+      remoteSelected.clear();
+      remoteAddDialog.close();
+      render();
+      await loadRemoteLeaderboard(true);
+    }
+  }catch(error){
+    showNotice(error instanceof Error?error.message:'远程操作失败');
+    try{await loadWorkspace(false)}catch(loadError){console.error(loadError)}
+  }finally{
+    isUpdating=false;
+    document.querySelector('#confirmRemoteAddButton').disabled=false;
+    document.querySelector('#cancelRemoteAddButton').disabled=false;
+    updateRemoteActions();
+  }
+});
+
 async function startPage(){
   const configStatus=await setupInitialization(()=>loadWorkspace());
   if(!configStatus.initialized)return;
@@ -590,6 +995,10 @@ async function startPage(){
     selectedCatalogSkills=new Set(pendingCatalogState.selectedSkillIds||[]);
   }
   await loadWorkspace();
+  try{await loadRemoteLeaderboard(true)}catch(error){
+    document.querySelector('#remoteStatus').textContent='榜单加载失败';
+    document.querySelector('#remoteList').innerHTML='<div class="remote-empty">'+escapeHtml(error instanceof Error?error.message:'加载失败')+'</div>';
+  }
   const scroll=document.querySelector('.catalog-scroll');
   if(scroll&&pendingCatalogState?.scrollTop)scroll.scrollTop=pendingCatalogState.scrollTop;
   sessionStorage.removeItem(catalogListStateKey());

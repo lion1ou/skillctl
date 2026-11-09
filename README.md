@@ -107,6 +107,7 @@ skill-ctl manage --port 4173 --no-open
 
 **Skill Source `/catalog`**
 
+- The top of the page browses skills.sh All Time / Trending (24h) / Hot leaderboards and search results, then registers external skills into the catalog or registers and installs them into a managed Workspace. Leaderboard and search responses are cached in the manage process for 30 minutes; tab switches, paging, and search reuse the cache until you click Refresh.
 - The page header Path settings control links a Skill source (absolute path or git URL) and cache directory; picking a local directory only fills the input until you save.
 - Visually edit `skillctl-skills.json` and `skillctl-categories.json`. Change category, description, and install-time `enabled`, and sync unregistered local skills from the source directory. This switch only affects `install`, not files already installed.
 - Click a card to open detail for the registered skill's source `SKILL.md`. Uncached external skills show as not prepared; the page does not download them automatically.
