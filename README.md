@@ -86,6 +86,18 @@ skill-ctl manage
 
 ### manage
 
+Installed skills (example data):
+
+![Installed skills page](docs/screenshots/installed.png)
+
+Skill Source:
+
+![Skill Source page](docs/screenshots/catalog.png)
+
+Usage dashboard (example data):
+
+![Skill usage dashboard](docs/screenshots/usage.png)
+
 `manage` starts a local dashboard on `127.0.0.1`. The top bar switches between Installed skills and Skill Source.
 
 ```bash

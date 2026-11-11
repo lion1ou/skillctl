@@ -86,6 +86,18 @@ skill-ctl manage
 
 ### manage
 
+安装管理页面（示例数据）：
+
+![安装管理页面](docs/screenshots/installed.png)
+
+Skill 源页面：
+
+![Skill 源页面](docs/screenshots/catalog.png)
+
+使用情况看板（示例数据）：
+
+![Skill 使用情况看板](docs/screenshots/usage.png)
+
 `manage` 在 `127.0.0.1` 启动本机管理页面，顶栏可在「安装管理」和「Skill 源」之间切换。
 
 ```bash
