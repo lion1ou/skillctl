@@ -2,6 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmdirSync, rmSync, w
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { resolveCliPackageRoot } from './cli-config.js';
+import { TTFUND_VERSIONED_SKILL_PATH, USAGE_SKILL_NAME_PATTERN } from './skill-usage.js';
 
 interface CursorHookCommand {
   command: string;
@@ -66,16 +67,15 @@ function hasShellMeta(part) {
 }
 
 function skillName(filePath) {
-  const match = String(filePath).match(/(?:^|\\/)(?:skills|skills-cursor)\\/(.+)$/);
+  if (${TTFUND_VERSIONED_SKILL_PATH}.test(filePath)) return '';
+  const match = filePath.match(/(?:^|\\/)(?:skills|skills-cursor)\\/(.+)$/);
   if (!match) return '';
   const parts = match[1].split('/').filter((part) => part.length > 0);
   if (parts[0] && parts[0].startsWith('.')) parts.shift();
   const file = parts[parts.length - 1] || '';
   if (!file.includes('.') || parts.some(hasShellMeta)) return '';
   const name = parts[0] || '';
-  if (!name || name === 'SKILL.md') return '';
-  const length = Array.from(name).length;
-  return length >= 1 && length <= 128 ? name : '';
+  return name !== 'SKILL.md' && ${USAGE_SKILL_NAME_PATTERN}.test(name) ? name : '';
 }
 
 function skillReads(filePath) {

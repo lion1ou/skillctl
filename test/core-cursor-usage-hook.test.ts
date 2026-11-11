@@ -302,7 +302,7 @@ appendFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)
     input: JSON.stringify({
       conversation_id: 'conv-3',
       tool_input: {
-        command: 'ls skills/lion1ou-writing-workflow; cat skills/lion1ou-writing-workflow/references/produce.md skills/lion1ou-writing-$s $HOME/.agents/skills/$s/SKILL.md skills/lion1ou-writing-{life,author,personal}/SKILL.md',
+        command: 'ls skills/lion1ou-writing-workflow; cat skills/lion1ou-writing-workflow/references/produce.md skills/lion1ou-writing-$s $HOME/.agents/skills/$s/SKILL.md skills/lion1ou-writing-{life,author,personal}/SKILL.md skills/[/w-]+/SKILL/.md ttfund-skills/skills/TTFUND_SEARCH/1.1.1/SKILL.md',
       },
     }),
     encoding: 'utf8',

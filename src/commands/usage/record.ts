@@ -19,6 +19,6 @@ export default class UsageRecord extends Command {
       conversationId: flags.conversation,
       count: flags.count,
     });
-    if (!flags.quiet) this.log(`${result.recorded ? 'recorded' : 'duplicate'}: ${result.name} ${result.readCount}`);
+    if (!flags.quiet) this.log(`${result.recorded ? 'recorded' : 'ignored'}: ${result.name} ${result.readCount}`);
   }
 }

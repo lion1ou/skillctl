@@ -53,21 +53,24 @@ export function resolveSkillUsagePath(env: NodeJS.ProcessEnv = process.env): str
   return join(dirname(resolveCliConfigPath(env)), 'usage.json');
 }
 
+export const USAGE_SKILL_NAME_PATTERN = /^[\p{L}\p{N}_][\p{L}\p{N}_.-]{0,127}$/u;
+export const TTFUND_VERSIONED_SKILL_PATH = /(?:^|\/)ttfund-skills\/skills\/[^/]+\/\d+\.\d+\.\d+\//;
+
 const SHELL_META = /[$*?{}`]/;
 
 /** 从 skills 或 skills-cursor 下的具体文件取出 skill 名。目录、变量、花括号和通配符不算。 */
 export function skillNameFromReadPath(filePath: string): string | null {
   if (!filePath) return null;
-  const match = filePath.replaceAll('\\', '/').match(/(?:^|\/)(?:skills|skills-cursor)\/(.+)$/);
+  const normalized = filePath.replaceAll('\\', '/');
+  if (TTFUND_VERSIONED_SKILL_PATH.test(normalized)) return null;
+  const match = normalized.match(/(?:^|\/)(?:skills|skills-cursor)\/(.+)$/);
   if (!match) return null;
   const parts = match[1].split('/').filter((part) => part.length > 0);
   if (parts[0]?.startsWith('.')) parts.shift();
   const file = parts.at(-1);
   if (!file?.includes('.') || parts.some((part) => SHELL_META.test(part))) return null;
   const name = parts[0];
-  if (!name || name === 'SKILL.md') return null;
-  const length = Array.from(name).length;
-  if (length < 1 || length > 128) return null;
+  if (!name || name === 'SKILL.md' || !USAGE_SKILL_NAME_PATTERN.test(name)) return null;
   return name;
 }
 
@@ -111,6 +114,9 @@ export function recordSkillRead(options: {
     throw new Error('skill 路径不能为空');
   }
   const path = options.path.trim();
+  if (!USAGE_SKILL_NAME_PATTERN.test(name) || TTFUND_VERSIONED_SKILL_PATH.test(path.replaceAll('\\', '/'))) {
+    return { recorded: false, readCount: 0, name };
+  }
   const count = normalizeReadCount(options.count);
   const conversationId = options.conversationId?.trim() || `manual:${randomUUID()}`;
   const readAt = (options.now ?? (() => new Date()))().toISOString();
@@ -148,7 +154,9 @@ export function recordSkillRead(options: {
 /** 汇总全部 skill 的读取次数，按次数从高到低。 */
 export function readSkillUsageSummary(env: NodeJS.ProcessEnv = process.env): SkillUsageSummary {
   const usage = readUsageFile(resolveSkillUsagePath(env));
-  const skills = Object.entries(usage.skills)
+  const entries = Object.entries(usage.skills).filter(([name, entry]) =>
+    USAGE_SKILL_NAME_PATTERN.test(name) && !TTFUND_VERSIONED_SKILL_PATH.test(entry.path.replaceAll('\\', '/')));
+  const skills = entries
     .map(([name, entry]) => ({
       name,
       path: entry.path,
@@ -157,7 +165,7 @@ export function readSkillUsageSummary(env: NodeJS.ProcessEnv = process.env): Ski
     }))
     .sort((left, right) => right.readCount - left.readCount || left.name.localeCompare(right.name));
   const totals = new Map<string, number>();
-  for (const entry of Object.values(usage.skills)) {
+  for (const [, entry] of entries) {
     for (const [day, count] of Object.entries(usageDays(entry))) {
       totals.set(day, (totals.get(day) ?? 0) + count);
     }

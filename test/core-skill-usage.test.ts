@@ -162,3 +162,29 @@ test('按本地日历日累计趋势，升级前只有一次读取时补到最�
     repo.cleanup();
   }
 });
+
+test('正则片段和 TTFund 版本化目录不计入 Skill 用量', () => {
+  const paths = [
+    '/([a-zA-Z0-9_.-]+)/skills/([a-zA-Z0-9_.-]+',
+    'skills/[/w-]+/SKILL/.md',
+    'Support/TTFund/ttfund-skills/skills/TTFUND_THEME_SELECT/1.0.0/examples/select.json',
+  ];
+  assert.deepEqual(skillUsesInText(paths.join(' ')), []);
+  const repo = createTmpRepo('skillctl-usage-invalid-');
+  const env = { XDG_CONFIG_HOME: join(repo.root, 'config') };
+  try {
+    recordSkillRead({ name: 'demo', path: '/skills/demo/SKILL.md', env });
+    const file = resolveSkillUsagePath(env);
+    const stored = JSON.parse(readFileSync(file, 'utf8'));
+    for (const [index, name] of ['([a-zA-Z0-9_.-]+', '[', 'TTFUND_THEME_SELECT'].entries()) {
+      stored.skills[name] = { ...stored.skills.demo, path: paths[index] };
+    }
+    writeFileSync(file, JSON.stringify(stored));
+    const summary = readSkillUsageSummary(env);
+    assert.deepEqual(summary.skills.map((skill) => skill.name), ['demo']);
+    assert.equal(summary.readCount, 1);
+    assert.equal(summary.daily[0]?.count, 1);
+  } finally {
+    repo.cleanup();
+  }
+});
